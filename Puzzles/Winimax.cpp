@@ -34,11 +34,19 @@ class Point
 	{
 		return 100000000 + x * 10000 + y < 100000000 + other.x * 10000 + other.y;
 	}
+
+	friend ostream &operator<<(ostream &os, Point const &m)
+	{
+		return os << "(" << m.x << "," << m.y << ")";
+	}
 };
 
 class Ball
 {
 	private:
+	bool pathDirty;
+	map<Point, char> pathCache;
+
 	void commit(char direction)
 	{
 		for(int i = 0; i < shotCount; i++)
@@ -46,6 +54,7 @@ class Ball
 			path.push_back(direction);
 		}
 		shotCount--;
+		pathDirty = true;
 	}
 
 	void uncommit()
@@ -58,9 +67,11 @@ class Ball
 			}
 			shotCount++;
 		}
+
+		pathDirty = true;
 	}
 	
-	vector<Point> strokePoints(Point begin, char direction, int amount)
+	vector<Point> strokePoints(Point begin, char direction, int amount) const
 	{
 		switch(direction)
 		{
@@ -77,7 +88,7 @@ class Ball
 		}
 	}
 
-	vector<Point> strokePoints(Point begin, Point end)
+	vector<Point> strokePoints(Point begin, Point end) const
 	{
 		vector<Point> points;
 		// If up
@@ -115,6 +126,26 @@ class Ball
 		
 		return points;
 	}
+	
+	void rebuildPathCache()
+	{
+		Point pathPoint = startPoint;
+		int pathShots = startShotCount;
+		pathCache.clear();
+		for(vector<char>::iterator stroke = path.begin(); stroke != path.end(); ++stroke)
+		{
+			vector<Point> strokePathPoints = strokePoints(pathPoint, (*stroke), pathShots--);
+			for(vector<Point>::iterator strokePoint = strokePathPoints.begin(); strokePoint != strokePathPoints.end(); ++strokePoint)
+			{
+				pathPoint = *strokePoint;
+				pathCache[pathPoint] = *stroke;
+				// pathPoint should go one further here.
+			}
+		}
+		
+		pathDirty = false;
+	}
+
 
 	public:
 	Point startPoint;
@@ -122,7 +153,7 @@ class Ball
 	Point currentPoint;
 	int shotCount;
 	vector<char> path;
-	
+		
 	Ball(int x, int y, int _shotCount)
 	{
 		startPoint = Point(x, y);
@@ -130,25 +161,34 @@ class Ball
 		startShotCount = _shotCount;
 		shotCount = _shotCount;
 	}
+	
+	char pathAt(Point point)
+	{
+		if (pathDirty)
+		{
+			rebuildPathCache();
+		}
+
+		char result = pathCache[point];
+		if (result == 0)
+		{
+			result = '.';
+		}
+		return result;
+	}
 
 	// Assume begin and end have same x or y
 	bool crossPath(Point begin, Point end)
 	{
-		Point pathPoint = startPoint;
-		int pathShots = startShotCount;
 		vector<Point> checkPoints = strokePoints(begin, end);
 		for(vector<char>::iterator stroke = path.begin(); stroke != path.end(); ++stroke)
 		{
-			vector<Point> strokePathPoints = strokePoints(pathPoint, (*stroke), pathShots--);
 			vector<Point> checkPoints = strokePoints(begin, end);
 			for(vector<Point>::iterator checkPoint = checkPoints.begin(); checkPoint != checkPoints.end(); ++checkPoint)
-			{				
-				for(vector<Point>::iterator strokePoint = strokePathPoints.begin(); strokePoint != strokePathPoints.end(); ++strokePoint)
+			{
+				if (pathAt(*checkPoint) != '.')
 				{
-					if ((*strokePoint) == (*checkPoint))
-					{
-						return true;
-					}
+					return true;
 				}
 			}
 		}
@@ -220,7 +260,7 @@ class Grid
 	
 	bool legal(Point begin, Point end)
 	{
-		if (end.x < 0 || end.y < 0 || end.x > width || end.y > height)
+		if (end.x < 0 || end.y < 0 || end.x >= width || end.y >= height)
 		{
 			return false;
 		}
@@ -290,14 +330,23 @@ class Grid
 		return solved;
 	}
 	
-	string printAnswer() const
+	string printAnswer()
 	{
 		string answer = "";
 		for (int y = 0; y < height; ++y)
 		{
 			for (int x = 0; x < width; x++)
 			{
-				answer += ".";
+				char thisAnswer = '.';
+				for(vector<Ball>::iterator ball = balls.begin(); ball != balls.end(); ++ball)
+				{
+					thisAnswer = (*ball).pathAt(Point(x, y));
+					if (thisAnswer != '.')
+					{
+						break;
+					}
+				}
+				answer += thisAnswer;
 			}
 			
 			answer += "\n";
