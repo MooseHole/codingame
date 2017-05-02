@@ -153,6 +153,7 @@ class Ball
 	Point currentPoint;
 	int shotCount;
 	vector<char> path;
+	bool inHole;
 		
 	Ball(int x, int y, int _shotCount)
 	{
@@ -160,6 +161,7 @@ class Ball
 		currentPoint = Point(x, y);
 		startShotCount = _shotCount;
 		shotCount = _shotCount;
+		inHole = false;
 	}
 	
 	char pathAt(Point point)
@@ -237,6 +239,24 @@ class Ball
 		}
 		return endPoint;
 	}
+	Point getPoint(char direction, bool doCommit = false)
+	{
+		switch (direction)
+		{
+			case '>':
+				return right(doCommit);
+			case 'v':
+				return down(doCommit);
+			case '<':
+				return left(doCommit);
+			case '^':
+				return up(doCommit);
+			case '.':
+				return currentPoint;
+			default:
+				return Point(-1, -1);
+		}
+	}
 	
 };
 
@@ -269,7 +289,10 @@ class Grid
 		{
 			return false;
 		}
-		
+	}
+	
+	bool pathClear(Point begin, Point end)
+	{
 		if ((locations[end.x][end.y] == 'H') && (holes[end] >= 0))
 		{
 			return false;
@@ -303,18 +326,12 @@ class Grid
 		}
 	}
 	
-	bool solve()
+	void solve(vector<Ball>::iterator ball, char direction)
 	{
-		for(vector<Ball>::iterator ball = balls.begin(); ball != balls.end(); ++ball)
+		if (!legal(ball->currentPoint, ball->getPoint(direction)))
 		{
-			if (legal(ball->currentPoint, ball->right()))
-			{
-				ball->right(true);
-			}
-			if (holes[ball->currentPoint] == -1)
-			{
-				holes[ball->currentPoint] = 1;
-			}
+			// Reject
+			return;
 		}
 		
 		bool solved = true;
@@ -326,8 +343,32 @@ class Grid
 				break;
 			}
 		}
+		if (solved)
+		{
+			// Accept
+			cout << printAnswer() << endl;
+			exit(0);
+		}
 		
-		return solved;
+		switch (direction)
+		{
+			case '>':
+				solve(ball, 'v');
+			case 'v':
+				solve(ball, '<');
+			case '<':
+				solve(ball, '^');
+			case '^':
+				solve(++ball, '>');
+			case '.':
+			default:
+				solve(ball, '>');
+		}		
+	}
+	
+	bool solve()
+	{
+		solve(balls.begin(), '.');
 	}
 	
 	string printAnswer()
