@@ -22,6 +22,11 @@ class Sample
 	Sample()
 	{
 	}
+	
+	bool Diagnosed()
+	{
+		return health >= 0;
+	}
 };
 
 class Player
@@ -40,6 +45,7 @@ class Player
 	int expertiseC;
 	int expertiseD;
 	int expertiseE;
+	vector<Sample> undiagnosed;
 	vector<Sample> samples;
 	
 	Player()
@@ -47,6 +53,11 @@ class Player
 	}
 	
 	bool readyToCollect()
+	{
+		return target == "SAMPLES" && eta == 0;
+	}
+	
+	bool readyToAnalyze()
 	{
 		return target == "DIAGNOSIS" && eta == 0;
 	}
@@ -63,7 +74,12 @@ class Player
 	
 	bool needToCollect()
 	{
-		return samples.empty();
+		return samples.empty() && undiagnosed.empty();
+	}
+	
+	bool needToAnalyze()
+	{
+		return samples.empty() && !undiagnosed.empty();
 	}
 	
 	bool needToGather()
@@ -94,7 +110,6 @@ class Player
 		
 		if (requiredA > storageA + expertiseA)
 		{
-			cerr << "A: Need " << requiredA << " have " << storageA + expertiseA << endl;
 			return 'A';
 		}
 		if (requiredB > storageB + expertiseB)
@@ -178,6 +193,8 @@ int main()
 		cloud.clear();
 		players[0].samples.clear();
 		players[1].samples.clear();
+		players[0].undiagnosed.clear();
+		players[1].undiagnosed.clear();
         for (int i = 0; i < sampleCount; i++) {
             int sampleId;
             int carriedBy;
@@ -207,21 +224,49 @@ int main()
 			}
 			else
 			{
-				players[sample.carriedBy].samples.push_back(sample);
+				if (sample.Diagnosed())
+				{
+					players[sample.carriedBy].samples.push_back(sample);
+				}
+				else
+				{
+					players[sample.carriedBy].undiagnosed.push_back(sample);
+				}
 			}
         }
 		
-		if (players[0].needToCollect())
+		if (players[0].needToAnalyze() || !cloud.empty())
 		{
-			if (players[0].readyToCollect())
+			if (players[0].readyToAnalyze())
 			{
-				// Get a sample
-				cout << "CONNECT " << cloud[0].sampleId << endl;
+				if (!cloud.empty())
+				{
+					// Get a sample
+					cout << "CONNECT " << cloud[0].sampleId << endl;
+				}
+				else
+				{
+					// Diagnose a sample
+					cout << "CONNECT " << players[0].undiagnosed[0].sampleId << endl;
+				}
 			}
 			else
 			{
 				// Go to station
 				cout << "GOTO DIAGNOSIS" << endl;
+			}
+		}
+		else if (players[0].needToCollect())
+		{
+			if (players[0].readyToCollect())
+			{
+				// Get a sample
+				cout << "CONNECT " << 1 << endl;
+			}
+			else
+			{
+				// Go to station
+				cout << "GOTO SAMPLES" << endl;
 			}
 		}
 		else if (players[0].needToGather())
