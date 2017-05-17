@@ -5,6 +5,9 @@
 
 using namespace std;
 
+#define MAX_SAMPLES 3
+#define MAX_MOLECULES 10
+
 class Sample
 {
 	public:
@@ -52,6 +55,16 @@ class Player
 	{
 	}
 	
+	int heldMolecules()
+	{
+		return storageA + storageB + storageC + storageD + storageE;
+	}
+	
+	int heldSamples()
+	{
+		return undiagnosed.size() + samples.size();
+	}
+	
 	bool readyToCollect()
 	{
 		return target == "SAMPLES" && eta == 0;
@@ -74,26 +87,119 @@ class Player
 	
 	bool needToCollect()
 	{
-		return samples.empty() && undiagnosed.empty();
+		return heldSamples() < MAX_SAMPLES;
 	}
 	
 	bool needToAnalyze()
 	{
-		return samples.empty() && !undiagnosed.empty();
+		return !undiagnosed.empty() && !needToCollect();
 	}
 	
 	bool needToGather()
 	{
-		return !samples.empty() && needMolecule() != 0;
+		return !samples.empty() && needMolecule() != 0 && heldMolecules() < MAX_MOLECULES;
 	}
 	
 	bool needToProduce()
 	{
 		return !samples.empty() && needMolecule() == 0;
 	}
+	
+	int distanceToSamples()
+	{
+		if (target == "")
+		{
+			return 2;
+		}
+		else if (target == "SAMPLES")
+		{
+			return eta;
+		}
+		else if (eta > 0)
+		{
+			return 100000000;
+		}
+		else
+		{
+			return 3;
+		}
+	}
+	
+	int distanceToDiagnosis()
+	{
+		if (target == "")
+		{
+			return 2;
+		}
+		else if (target == "DIAGNOSIS")
+		{
+			return eta;
+		}
+		else if (eta > 0)
+		{
+			return 100000000;
+		}
+		else if (target == "LABORATORY")
+		{
+			return 4;
+		}
+		else
+		{
+			return 3;
+		}
+	}
+	
+	int distanceToMolecules()
+	{
+		if (target == "")
+		{
+			return 2;
+		}
+		else if (target == "MOLECULES")
+		{
+			return eta;
+		}
+		else if (eta > 0)
+		{
+			return 100000000;
+		}
+		else
+		{
+			return 3;
+		}
+	}
+
+	int distanceToLaboratory()
+	{
+		if (target == "")
+		{
+			return 2;
+		}
+		else if (target == "LABORATORY")
+		{
+			return eta;
+		}
+		else if (eta > 0)
+		{
+			return 100000000;
+		}
+		else if (target == "DIAGNOSIS")
+		{
+			return 4;
+		}
+		else
+		{
+			return 3;
+		}
+	}
 
 	char needMolecule()
 	{
+		if (heldMolecules() >= MAX_MOLECULES)
+		{
+			return 0;
+		}
+
 		int requiredA = 0;
 		int requiredB = 0;
 		int requiredC = 0;
@@ -235,52 +341,60 @@ int main()
 			}
         }
 		
-		if (players[0].needToAnalyze() || !cloud.empty())
+		// If not at any station
+		if (!players[0].readyToCollect() && !players[0].readyToAnalyze() && !players[0].readyToGather() && !players[0].readyToProduce())
 		{
-			if (players[0].readyToAnalyze())
+			if (players[0].needToCollect() && players[0].distanceToSamples() < 10)
 			{
-				if (!cloud.empty())
-				{
-					// Get a sample
-					cout << "CONNECT " << cloud[0].sampleId << endl;
-				}
-				else
-				{
-					// Diagnose a sample
-					cout << "CONNECT " << players[0].undiagnosed[0].sampleId << endl;
-				}
-			}
-			else
-			{
-				// Go to station
-				cout << "GOTO DIAGNOSIS" << endl;
-			}
-		}
-		else if (players[0].needToCollect())
-		{
-			if (players[0].readyToCollect())
-			{
-				// Get a sample
-				cout << "CONNECT " << 1 << endl;
-			}
-			else
-			{
-				// Go to station
 				cout << "GOTO SAMPLES" << endl;
 			}
-		}
-		else if (players[0].needToGather())
-		{
-			if (players[0].readyToGather())
+			else if ((players[0].needToAnalyze() || !cloud.empty()) && players[0].distanceToDiagnosis() < 10)
 			{
-				// Get molecules
-				cout << "CONNECT " << players[0].needMolecule() << endl;
+				cout << "GOTO DIAGNOSIS" << endl;
+			}
+			else if (players[0].needToGather() && players[0].distanceToMolecules() < 10)
+			{
+				cout << "GOTO MOLECULES" << endl;
+			}
+			else if (players[0].needToProduce() && players[0].distanceToLaboratory() < 10)
+			{
+				cout << "GOTO LABORATORY" << endl;
+			}
+		}
+		else if (players[0].readyToAnalyze())
+		{
+			if (!cloud.empty() && heldSamples() < MAX_SAMPLES)
+			{
+				// Get a sample from the cloud
+				int minMoleculesNeeded = 1000000;
+				Sample bestSample = cloud[0];
+				for (vector<Sample>::iterator sample = cloud.begin(); sample != cloud.end(); ++sample)
+				{
+					int moleculesNeeded = 0;
+					moleculesNeeded += max(players[0].storageA + players[0].expertiseA - sample->costA, 0);
+					moleculesNeeded += max(players[0].storageB + players[0].expertiseB - sample->costB, 0);
+					moleculesNeeded += max(players[0].storageC + players[0].expertiseC - sample->costC, 0);
+					moleculesNeeded += max(players[0].storageD + players[0].expertiseD - sample->costD, 0);
+					moleculesNeeded += max(players[0].storageE + players[0].expertiseE - sample->costE, 0);
+					if (moleculesNeeded < minMoleculesNeeded)
+					{
+						minMoleculesNeeded = moleculesNeeded;
+						bestSample = *sample;
+					}
+				}
+
+				cout << "CONNECT " << bestSample.sampleId << endl;
 			}
 			else
 			{
-				// Go to station
-				cout << "GOTO MOLECULES" << endl;
+				// Diagnose a sample
+				cout << "CONNECT " << players[0].undiagnosed[0].sampleId << endl;
 			}
+		}
+		else if (players[0].readyToGather())
+		{
+			// Get molecules
+			cout << "CONNECT " << players[0].needMolecule() << endl;
 		}
 		else if (players[0].needToProduce())
 		{
