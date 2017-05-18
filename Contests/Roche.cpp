@@ -25,12 +25,39 @@ class Sample
 	Sample()
 	{
 	}
-	
-	bool Diagnosed()
+
+	Sample& operator=(const Sample& other)
+	{
+		sampleId = other.sampleId;
+		carriedBy = other.carriedBy;
+		rank = other.rank;
+		expertiseGain = other.expertiseGain;
+		health = other.health;
+		costA = other.costA;
+		costB = other.costB;
+		costC = other.costC;
+		costD = other.costD;
+		costE = other.costE;
+		return *this;
+	}
+
+	bool Diagnosed() const
 	{
 		return health >= 0;
 	}
+	
+	bool canBeMadeWith(int A, int B, int C, int D, int E) const
+	{
+		return A >= costA && B >= costB && C >= costC && D >= costD && E >= costE;
+	}
 };
+
+int availableA;
+int availableB;
+int availableC;
+int availableD;
+int availableE;
+vector<Sample> cloud;
 
 class Player
 {
@@ -54,58 +81,194 @@ class Player
 	Player()
 	{
 	}
-	
-	int heldMolecules()
+
+	bool canMakeAfterGather(Sample sample) const
+	{
+		return sample.canBeMadeWith(storageA + expertiseA + availableA,
+									storageB + expertiseB + availableB,
+									storageC + expertiseC + availableC,
+									storageD + expertiseD + availableD,
+									storageE + expertiseE + availableE);
+	}
+
+	bool canProduce(Sample sample) const
+	{
+		return sample.canBeMadeWith(storageA + expertiseA,
+									storageB + expertiseB,
+									storageC + expertiseC,
+									storageD + expertiseD,
+									storageE + expertiseE);
+	}
+
+	int heldMolecules() const
 	{
 		return storageA + storageB + storageC + storageD + storageE;
 	}
 	
-	int heldSamples()
+	int heldSamples() const
 	{
 		return undiagnosed.size() + samples.size();
 	}
 	
-	bool readyToCollect()
+	bool readyToCollect() const
 	{
-		return target == "SAMPLES" && eta == 0;
+		return target == "SAMPLES" && eta == 0 && needToCollect();
 	}
 	
-	bool readyToAnalyze()
+	bool readyToAnalyze() const
 	{
-		return target == "DIAGNOSIS" && eta == 0;
+		return target == "DIAGNOSIS" && eta == 0 && needToAnalyze();
 	}
 	
-	bool readyToGather()
+	bool readyToGather() const
 	{
-		return target == "MOLECULES" && eta == 0;
+		return target == "MOLECULES" && eta == 0 && needToGather();
 	}
 	
-	bool readyToProduce()
+	bool readyToProduce() const
 	{
-		return target == "LABORATORY" && eta == 0;
+		return target == "LABORATORY" && eta == 0 && needToProduce();
+	}
+		
+	bool needToCollect() const
+	{
+		return heldSamples() < MAX_SAMPLES && samples.empty();
 	}
 	
-	bool needToCollect()
+	bool needToAnalyze() const
 	{
-		return heldSamples() < MAX_SAMPLES;
+		return !undiagnosed.empty() || unmakeableSample() >= 0;
 	}
 	
-	bool needToAnalyze()
+	bool needToGather() const
 	{
-		return !undiagnosed.empty() && !needToCollect();
+		return !samples.empty() && canGatherMolecule(needMolecule()) && heldMolecules() < MAX_MOLECULES;
 	}
 	
-	bool needToGather()
-	{
-		return !samples.empty() && needMolecule() != 0 && heldMolecules() < MAX_MOLECULES;
-	}
-	
-	bool needToProduce()
+	bool needToProduce() const
 	{
 		return !samples.empty() && needMolecule() == 0;
 	}
 	
-	int distanceToSamples()
+	bool canGatherMolecule(char molecule) const
+	{
+		if (molecule == 0) return false;
+		switch (molecule)
+		{
+			case 'A':
+				return availableA > 0;
+			case 'B':
+				return availableB > 0;
+			case 'C':
+				return availableC > 0;
+			case 'D':
+				return availableD > 0;
+			case 'E':
+				return availableE > 0;
+			default:
+				return false;
+		}
+	}
+	
+	int sampleToCollect() const
+	{
+		bool need1 = true;
+		bool need2 = true;
+		bool need3 = true;
+		for (vector<Sample>::const_iterator sample = samples.begin(); sample != samples.end(); ++sample)
+		{
+			if (sample->rank == 1)
+			{
+				need1 = false;
+			}
+			else if (sample->rank == 2)
+			{
+				need2 = false;
+			}
+			else if (sample->rank == 3)
+			{
+				need3 = false;
+			}
+		}
+		for (vector<Sample>::const_iterator sample = undiagnosed.begin(); sample != undiagnosed.end(); ++sample)
+		{
+			if (sample->rank == 1)
+			{
+				need1 = false;
+			}
+			else if (sample->rank == 2)
+			{
+				need2 = false;
+			}
+			else if (sample->rank == 3)
+			{
+				need3 = false;
+			}
+		}
+
+		if (need1) return 1;
+		if (need2) return 2;
+		if (need3) return 3;
+	}
+
+	int unmakeableSample() const
+	{
+		for (vector<Sample>::const_iterator sample = samples.begin(); sample != samples.end(); ++sample)
+		{
+			if (!canMakeAfterGather(*sample))
+			{
+				return sample->sampleId;
+			}
+		}
+		
+		return -1;
+	}
+
+	int sampleToProduce() const
+	{
+		int bestHealth = samples[0].sampleId;
+		int highestHealth = 0;
+		for (vector<Sample>::const_iterator sample = samples.begin(); sample != samples.end(); ++sample)
+		{
+			if (canProduce(*sample))
+			{
+				if (sample->health > highestHealth)
+				{
+					highestHealth = sample->health;
+					bestHealth = sample->sampleId;
+				}
+			}
+		}
+
+		return bestHealth;
+	}
+	
+	int totalA() const
+	{
+		return storageA + expertiseA;
+	}
+	
+	int totalB() const
+	{
+		return storageB + expertiseB;
+	}
+	
+	int totalC() const
+	{
+		return storageC + expertiseC;
+	}
+	
+	int totalD() const
+	{
+		return storageD + expertiseD;
+	}
+	
+	int totalE() const
+	{
+		return storageE + expertiseE;
+	}
+	
+	int distanceToSamples() const
 	{
 		if (target == "")
 		{
@@ -125,7 +288,7 @@ class Player
 		}
 	}
 	
-	int distanceToDiagnosis()
+	int distanceToDiagnosis() const
 	{
 		if (target == "")
 		{
@@ -149,7 +312,7 @@ class Player
 		}
 	}
 	
-	int distanceToMolecules()
+	int distanceToMolecules() const
 	{
 		if (target == "")
 		{
@@ -169,7 +332,7 @@ class Player
 		}
 	}
 
-	int distanceToLaboratory()
+	int distanceToLaboratory() const
 	{
 		if (target == "")
 		{
@@ -193,7 +356,7 @@ class Player
 		}
 	}
 
-	char needMolecule()
+	char needMolecule() const
 	{
 		if (heldMolecules() >= MAX_MOLECULES)
 		{
@@ -205,7 +368,7 @@ class Player
 		int requiredC = 0;
 		int requiredD = 0;
 		int requiredE = 0;
-		for (vector<Sample>::iterator sample = samples.begin(); sample != samples.end(); ++sample)
+		for (vector<Sample>::const_iterator sample = samples.begin(); sample != samples.end(); ++sample)
 		{
 			requiredA += sample->costA;
 			requiredB += sample->costB;
@@ -236,6 +399,57 @@ class Player
 		}
 		return 0;
 	}
+	
+	int sampleFromCloud() const
+	{
+		if (!cloud.empty() && heldSamples() < MAX_SAMPLES)
+		{
+			// Get a sample from the cloud
+			int highestHealth = 0;
+			int bestSample = -1;
+			for (vector<Sample>::iterator sample = cloud.begin(); sample != cloud.end(); ++sample)
+			{
+				if (canMakeAfterGather(*sample))
+				{
+					if (sample->health > highestHealth)
+					{
+						highestHealth = sample->health;
+						bestSample = sample->sampleId;
+					}
+				}
+			}
+			
+			if (bestSample >= 0)
+			{
+				return bestSample;
+			}
+		}
+		
+		return -1;
+	}
+
+	string travelTo() const
+	{
+		string travelTarget = "ERROR";
+		if (needToCollect() && distanceToSamples() < 10)
+		{
+			travelTarget = "SAMPLES";
+		}
+		else if ((needToAnalyze() || sampleFromCloud() >= 0) && distanceToDiagnosis() < 10)
+		{
+			travelTarget = "DIAGNOSIS";
+		}
+		else if (needToGather() && distanceToMolecules() < 10)
+		{
+			travelTarget = "MOLECULES";
+		}
+		else if (needToProduce() && distanceToLaboratory() < 10)
+		{
+			travelTarget = "LABORATORY";
+		}
+		
+		return travelTarget;
+	}
 };
 
 /**
@@ -255,7 +469,6 @@ int main()
     }
 	
 	Player players[2];
-	vector<Sample> cloud;
 
     // game loop
     while (1) {
@@ -288,11 +501,6 @@ int main()
 			players[i].expertiseD = expertiseD;
 			players[i].expertiseE = expertiseE;
         }
-        int availableA;
-        int availableB;
-        int availableC;
-        int availableD;
-        int availableE;
         cin >> availableA >> availableB >> availableC >> availableD >> availableE; cin.ignore();
         int sampleCount;
         cin >> sampleCount; cin.ignore();
@@ -344,46 +552,24 @@ int main()
 		// If not at any station
 		if (!players[0].readyToCollect() && !players[0].readyToAnalyze() && !players[0].readyToGather() && !players[0].readyToProduce())
 		{
-			if (players[0].needToCollect() && players[0].distanceToSamples() < 10)
-			{
-				cout << "GOTO SAMPLES" << endl;
-			}
-			else if ((players[0].needToAnalyze() || !cloud.empty()) && players[0].distanceToDiagnosis() < 10)
-			{
-				cout << "GOTO DIAGNOSIS" << endl;
-			}
-			else if (players[0].needToGather() && players[0].distanceToMolecules() < 10)
-			{
-				cout << "GOTO MOLECULES" << endl;
-			}
-			else if (players[0].needToProduce() && players[0].distanceToLaboratory() < 10)
-			{
-				cout << "GOTO LABORATORY" << endl;
-			}
+			cout << "GOTO " << players[0].travelTo() << endl;
+		}
+		else if (players[0].readyToCollect())
+		{
+			cout << "CONNECT " << players[0].sampleToCollect() << endl;
 		}
 		else if (players[0].readyToAnalyze())
 		{
-			if (!cloud.empty() && heldSamples() < MAX_SAMPLES)
+			int cloudSample = players[0].sampleFromCloud();
+			int unmakeableSample = players[0].unmakeableSample();
+			if (cloudSample >= 0)
 			{
-				// Get a sample from the cloud
-				int minMoleculesNeeded = 1000000;
-				Sample bestSample = cloud[0];
-				for (vector<Sample>::iterator sample = cloud.begin(); sample != cloud.end(); ++sample)
-				{
-					int moleculesNeeded = 0;
-					moleculesNeeded += max(players[0].storageA + players[0].expertiseA - sample->costA, 0);
-					moleculesNeeded += max(players[0].storageB + players[0].expertiseB - sample->costB, 0);
-					moleculesNeeded += max(players[0].storageC + players[0].expertiseC - sample->costC, 0);
-					moleculesNeeded += max(players[0].storageD + players[0].expertiseD - sample->costD, 0);
-					moleculesNeeded += max(players[0].storageE + players[0].expertiseE - sample->costE, 0);
-					if (moleculesNeeded < minMoleculesNeeded)
-					{
-						minMoleculesNeeded = moleculesNeeded;
-						bestSample = *sample;
-					}
-				}
-
-				cout << "CONNECT " << bestSample.sampleId << endl;
+				cout << "CONNECT " << cloudSample << endl;
+			}
+			else if (unmakeableSample >= 0)
+			{
+				// Upload to cloud
+				cout << "CONNECT " << unmakeableSample << endl;
 			}
 			else
 			{
@@ -396,23 +582,10 @@ int main()
 			// Get molecules
 			cout << "CONNECT " << players[0].needMolecule() << endl;
 		}
-		else if (players[0].needToProduce())
+		else if (players[0].readyToProduce())
 		{
-			if (players[0].readyToProduce())
-			{
-				// Produce medicine
-				cout << "CONNECT " << players[0].samples[0].sampleId << endl;
-			}
-			else
-			{
-				// Go to station
-				cout << "GOTO LABORATORY" << endl;
-			}
-		}
-
-        // Write an action using cout. DON'T FORGET THE "<< endl"
-        // To debug: cerr << "Debug messages..." << endl;
-
-        
+			// Produce medicine
+			cout << "CONNECT " << players[0].sampleToProduce() << endl;
+		}        
     }
 }
