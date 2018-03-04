@@ -86,6 +86,19 @@ public:
 		return *this;
 	}
 
+	// The Eucledean distance between this coordinate and the input
+	int distance(Location to)
+	{
+		return sqrt(squaredDistance(to));
+	}
+
+	// The squared Eucledean distance between this coordinate and the input
+	// Avoids using sqrt
+	int squaredDistance(Location to)
+	{
+		return pow(to.x - x, 2) + pow(to.y - y, 2);
+	}
+
 	// Returns the difference angle in degrees
 	int angleTo(Location other)
 	{
@@ -269,6 +282,7 @@ Unit enemyHero;
 Unit myHero;
 Unit enemyTower;
 Unit myTower;
+Unit closestEnemy;
 
 string attackPlace(Unit target)
 {
@@ -283,7 +297,11 @@ void attackHero()
 
 void retreat()
 {
-//	cout << "MOVE " << myTower.locationOutput() << endl;
+	int attackId = enemyHero.unitId;
+	if (enemyHero.location.distance(myHero.location) <= myHero.attackRange)
+	{
+		attackId = closestEnemy.unitId;
+	}
 	cout << "MOVE_ATTACK " << myTower.locationOutput() << " " << enemyHero.unitId << endl;
 }
 
@@ -333,6 +351,10 @@ int main()
 		int entityCount;
 		cin >> entityCount; cin.ignore();
 
+		// Reset enemy distance
+		closestEnemy.location.x = -1000000;
+		closestEnemy.location.y = -1000000;
+
 		for (int i = 0; i < entityCount; i++)
 		{
 			int unitId;
@@ -370,6 +392,17 @@ int main()
 				else if (unitType == "HERO")
 				{
 					enemyHero = e;
+					if (closestEnemy.location.squaredDistance(myHero.location) > e.location.squaredDistance(myHero.location))
+					{
+						closestEnemy = e;
+					}
+				}
+				else if (unitType == "UNIT")
+				{
+					if (closestEnemy.location.squaredDistance(myHero.location) > e.location.squaredDistance(myHero.location))
+					{
+						closestEnemy = e;
+					}
 				}
 			}
 			else
