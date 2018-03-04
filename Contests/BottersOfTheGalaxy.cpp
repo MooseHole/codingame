@@ -2,15 +2,21 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 using namespace std;
 
+// Math constants
+#define CIRCLE_DEGREES 360				// The number of degrees in a circle
+#define RAD_TO_DEG 180.0f/3.14159f		// Used to convert radians to degrees
+#define DEG_TO_RAD 3.14159f/180.0f		// Used to convert degrees to radians
+
 class Location
 {
+public:
 	int x;
 	int y;
 
-public:
 	Location()
 	{
 		x = 0;
@@ -40,6 +46,64 @@ public:
 		return !(*this == other);
 	}
 
+	Location operator+(const Location& other)
+	{
+		return Location(x + other.x, y + other.y);
+	}
+
+	Location operator-(const Location& other)
+	{
+		return Location(x - other.x, y - other.y);
+	}
+
+	Location operator*(const Location& other)
+	{
+		return Location(x * other.x, y * other.y);
+	}
+
+	Location operator*(const float scalar)
+	{
+		int precision = 100;
+		int bigScalar = (scalar * precision);
+		return Location((x * bigScalar) / precision, (y * bigScalar) / precision);
+	}
+
+	Location operator/(const float scalar)
+	{
+		if (scalar == 0)
+		{
+			return Location(0, 0);
+		}
+
+		int precision = 100;
+		int bigScalar = (scalar * precision);
+		return Location(((x * precision) / bigScalar), ((y * precision) / bigScalar));
+	}
+
+	Location& operator+=(const Location& other)
+	{
+		*this = *this + other;
+		return *this;
+	}
+
+	// Returns the difference angle in degrees
+	int angleTo(Location other)
+	{
+		Location diff = *this - other;
+		return diff.angle();
+	}
+
+	// Returns the angle of a vector in degrees
+	int angle()
+	{
+		return ((int)((atan2(y, x)) * RAD_TO_DEG) + CIRCLE_DEGREES) % CIRCLE_DEGREES;
+	}
+
+	string locationOutput() const
+	{
+		return to_string(x) + " " + to_string(y);
+	}
+
 	string print() const
 	{
 		return "(" + to_string(x) + "," + to_string(y) + ")";
@@ -53,11 +117,10 @@ public:
 
 class Entity
 {
-protected:
+public:
 	string entityType;
 	Location location;
 
-public:
 	Entity()
 	{
 	}
@@ -66,6 +129,11 @@ public:
 	{
 		entityType = _entityType;
 		location = _location;
+	}
+
+	string locationOutput() const
+	{
+		return to_string(location.x) + " " + to_string(location.y);
 	}
 
 	string print() const
@@ -104,6 +172,7 @@ public:
 
 class Unit : public Entity
 {
+public:
 	int unitId;
 	bool myTeam;
 	int attackRange;
@@ -124,7 +193,11 @@ class Unit : public Entity
 	bool isVisible; // 0 if it isn't
 	int itemsOwned; // useful from wood1
 
-public:
+	Unit()
+	{
+
+	}
+
 	Unit(string _entityType, Location _location, int _unitId, bool _myTeam, int _attackRange, int _health, int _maxHealth, int _shield, int _attackDamage, int _movementSpeed, int _stunDuration, int _goldValue, int _countDown1, int _countDown2, int _countDown3, int _mana, int _maxMana, int _manaRegeneration, string _heroType, bool _isVisible, int _itemsOwned)
 	{
 		entityType = _entityType;
@@ -150,6 +223,37 @@ public:
 		itemsOwned = _itemsOwned;
 	}
 
+	Unit& operator=(Unit other)
+	{
+		entityType = other.entityType;
+		location = other.location;
+		unitId = other.unitId;
+		myTeam = other.myTeam;
+		attackRange = other.attackRange;
+		health = other.health;
+		maxHealth = other.maxHealth;
+		shield = other.shield;
+		attackDamage = other.attackDamage;
+		movementSpeed = other.movementSpeed;
+		stunDuration = other.stunDuration;
+		goldValue = other.goldValue;
+		countDown1 = other.countDown1;
+		countDown2 = other.countDown2;
+		countDown3 = other.countDown3;
+		mana = other.mana;
+		maxMana = other.maxMana;
+		manaRegeneration = other.manaRegeneration;
+		heroType = other.heroType;
+		isVisible = other.isVisible;
+		itemsOwned = other.itemsOwned;
+		return *this;
+	}
+
+	int healthPercent() const
+	{
+		return (health * 100) / maxHealth;
+	}
+
 	string print() const
 	{
 		return "[" + entityType + " " + location.print() + " {" + to_string(unitId) + " " + heroType + "}]";
@@ -160,6 +264,33 @@ public:
 		return os << m.print();
 	}
 };
+
+Unit enemyHero;
+Unit myHero;
+Unit enemyTower;
+Unit myTower;
+
+string attackPlace(Unit target)
+{
+	int angle = target.location.angleTo(myTower.location) + CIRCLE_DEGREES/2;
+	return to_string(myHero.attackRange * cos(angle * DEG_TO_RAD) + target.location.x) + " " + to_string(myHero.attackRange * sin(angle * DEG_TO_RAD) + target.location.y);
+}
+
+void attackHero()
+{
+	cout << "MOVE_ATTACK " << attackPlace(enemyHero) << " " << enemyHero.unitId << endl;
+}
+
+void retreat()
+{
+//	cout << "MOVE " << myTower.locationOutput() << endl;
+	cout << "MOVE_ATTACK " << myTower.locationOutput() << " " << enemyHero.unitId << endl;
+}
+
+void chooseHero()
+{
+	cout << "WAIT" << endl;
+}
 
 int main()
 {
@@ -191,7 +322,8 @@ int main()
 	}
 
 	// game loop
-	while (1) {
+	while (1)
+	{
 		int gold;
 		cin >> gold; cin.ignore();
 		int enemyGold;
@@ -200,9 +332,9 @@ int main()
 		cin >> roundType; cin.ignore();
 		int entityCount;
 		cin >> entityCount; cin.ignore();
-		int enemyTower = 0;
-		int enemyHero = 0;
-		for (int i = 0; i < entityCount; i++) {
+
+		for (int i = 0; i < entityCount; i++)
+		{
 			int unitId;
 			int team;
 			string unitType; // UNIT, HERO, TOWER, can also be GROOT from wood1
@@ -233,28 +365,40 @@ int main()
 			{
 				if (unitType == "TOWER")
 				{
-					enemyTower = unitId;
+					enemyTower = e;
 				}
 				else if (unitType == "HERO")
 				{
-					enemyHero = unitId;
+					enemyHero = e;
+				}
+			}
+			else
+			{
+				if (unitType == "TOWER")
+				{
+					myTower = e;
+				}
+				else if (unitType == "HERO")
+				{
+					myHero = e;
 				}
 			}
 		}
 
-		// Write an action using cout. DON'T FORGET THE "<< endl"
-		// To debug: cerr << "Debug messages..." << endl;
-
-
-		// If roundType has a negative value then you need to output a Hero name, such as "DEADPOOL" or "VALKYRIE".
-		// Else you need to output roundType number of any valid action, such as "WAIT" or "ATTACK unitId"
 		if (roundType < 0)
 		{
-			cout << "HULK" << endl;
+			chooseHero();
 		}
 		else
 		{
-			cout << "ATTACK " << enemyHero << endl;
+			if (myHero.healthPercent() < enemyHero.healthPercent())
+			{
+				retreat();
+			}
+			else
+			{
+				attackHero();
+			}
 		}
 	}
 }
