@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 using namespace std;
 
@@ -10,6 +11,10 @@ using namespace std;
 #define CIRCLE_DEGREES 360				// The number of degrees in a circle
 #define RAD_TO_DEG 180.0f/3.14159f		// Used to convert radians to degrees
 #define DEG_TO_RAD 3.14159f/180.0f		// Used to convert degrees to radians
+
+// Game Constants
+#define MAX_X 1920
+#define MAX_Y 750
 
 class Location
 {
@@ -183,6 +188,65 @@ public:
 	}
 };
 
+class Item
+{
+public:
+	string itemName;
+	int itemCost;
+	int damage;
+	int health;
+	int maxHealth;
+	int mana;
+	int maxMana;
+	int moveSpeed;
+	int manaRegeneration;
+	int isPotion;
+
+	Item()
+	{
+	}
+
+	Item(string _itemName, int _itemCost, int _damage, int _health, int _maxHealth, int _mana, int _maxMana, int _moveSpeed, int _manaRegeneration, int _isPotion)
+	{
+		itemName = _itemName;
+		itemCost = _itemCost;
+		damage = _damage;
+		health = _health;
+		maxHealth = _maxHealth;
+		mana = _mana;
+		maxMana = _maxMana;
+		moveSpeed = _moveSpeed;
+		manaRegeneration = _manaRegeneration;
+		isPotion = _isPotion;
+	}
+
+	Item& operator=(Item other)
+	{
+		itemName = other.itemName;
+		itemCost = other.itemCost;
+		damage = other.damage;
+		health = other.health;
+		maxHealth = other.maxHealth;
+		mana = other.mana;
+		maxMana = other.maxMana;
+		moveSpeed = other.moveSpeed;
+		manaRegeneration = other.manaRegeneration;
+		isPotion = other.isPotion;
+		return *this;
+	}
+
+	bool operator<(const Item& other) const
+	{
+		if (false) return true;
+		else if (maxHealth < other.maxHealth) return true;
+		else if (health < other.health) return true;
+		else if (damage < other.damage) return true;
+		else if (itemCost < other.itemCost) return true;
+		else if (isPotion && !other.isPotion) return true;
+		else return itemName < other.itemName;
+	}
+};
+
 class Unit : public Entity
 {
 public:
@@ -208,7 +272,6 @@ public:
 
 	Unit()
 	{
-
 	}
 
 	Unit(string _entityType, Location _location, int _unitId, bool _myTeam, int _attackRange, int _health, int _maxHealth, int _shield, int _attackDamage, int _movementSpeed, int _stunDuration, int _goldValue, int _countDown1, int _countDown2, int _countDown3, int _mana, int _maxMana, int _manaRegeneration, string _heroType, bool _isVisible, int _itemsOwned)
@@ -278,36 +341,96 @@ public:
 	}
 };
 
+int myGold;
+int enemyGold;
 Unit enemyHero;
 Unit myHero;
 Unit enemyTower;
 Unit myTower;
 Unit closestEnemy;
+multiset<Item> store;
+multiset<Item> inventory;
 
-string attackPlace(Unit target)
+Location attackPlace(Unit target)
 {
 	int angle = target.location.angleTo(myTower.location) + CIRCLE_DEGREES/2;
-	return to_string(myHero.attackRange * cos(angle * DEG_TO_RAD) + target.location.x) + " " + to_string(myHero.attackRange * sin(angle * DEG_TO_RAD) + target.location.y);
+	return Location(myHero.attackRange * cos(angle * DEG_TO_RAD) + target.location.x, myHero.attackRange * sin(angle * DEG_TO_RAD) + target.location.y);
 }
 
 void attackHero()
 {
-	cout << "MOVE_ATTACK " << attackPlace(enemyHero) << " " << enemyHero.unitId << endl;
+	Location place = attackPlace(enemyHero);
+	cout << "MOVE_ATTACK " << place.locationOutput() << " " << enemyHero.unitId << endl;
 }
 
 void retreat()
 {
 	int attackId = enemyHero.unitId;
-	if (enemyHero.location.distance(myHero.location) <= myHero.attackRange)
+	// If enemy hero is out of range
+	if (enemyHero.location.distance(myHero.location) > myHero.attackRange)
 	{
+		// Attack the closest enemy instead
 		attackId = closestEnemy.unitId;
 	}
-	cout << "MOVE_ATTACK " << myTower.locationOutput() << " " << enemyHero.unitId << endl;
+
+	// If I'm not home or I can hit a target
+	cerr << myHero.location << "!=" << myTower.location << "?" << ((myHero.location != myTower.location) ? "T" : "F") << endl;
+	cerr << "closestEnemy at " << closestEnemy.location << endl;
+	cerr << "enemysquareddistance=" << closestEnemy.location.squaredDistance(myHero.location) << endl;
+	cerr << "enemydistance=" << closestEnemy.location.distance(myHero.location) << endl;
+	cerr << "attackRange=" << myHero.attackRange << endl;
+	if (myHero.location != myTower.location || closestEnemy.location.distance(myHero.location) <= myHero.attackRange)
+	{
+		// Go home and/or attack
+		cout << "MOVE_ATTACK " << myTower.locationOutput() << " " << attackId << endl;
+		return;
+	}
+	else
+	{
+		// Buy something
+		if (inventory.size() < 4)
+		{
+			cerr << "Shopping, inventory at " << inventory.size() << " gold at " << myGold << endl;
+			for (multiset<Item>::reverse_iterator it = store.rbegin(); it != store.rend(); ++it)
+			{
+				cerr << it->itemName << " " << it->itemCost << endl;
+				if (it->itemCost <= myGold)
+				{
+					cout << "BUY " << it->itemName << endl;
+					if (!it->isPotion)
+					{
+						inventory.insert(*it);
+					}
+					store.erase(--(it.base()));
+					return;
+				}
+			}
+		}
+		else
+		{
+			cerr << "Selling, gold at" << myGold << endl;
+			for (multiset<Item>::reverse_iterator it = store.rbegin(); it != store.rend(); ++it)
+			{
+				for (multiset<Item>::iterator it2 = inventory.begin(); it2 != inventory.end(); ++it2)
+				{
+					cerr << it->itemName << " " << it->itemCost << " vs. " << it2->itemName << " " << it2->itemCost << endl;
+					if ((*it2 < *it) && (it->itemCost <= myGold + it2->itemCost/2))
+					{
+						cout << "SELL " << it2->itemName << endl;
+						inventory.erase(it2);
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	cout << "WAIT" << endl;
 }
 
 void chooseHero()
 {
-	cout << "WAIT" << endl;
+	cout << "IRONMAN" << endl;
 }
 
 int main()
@@ -325,7 +448,8 @@ int main()
 	}
 	int itemCount; // useful from wood2
 	cin >> itemCount; cin.ignore();
-	for (int i = 0; i < itemCount; i++) {
+	for (int i = 0; i < itemCount; i++)
+	{
 		string itemName; // contains keywords such as BRONZE, SILVER and BLADE, BOOTS connected by "_" to help you sort easier
 		int itemCost; // BRONZE items have lowest cost, the most expensive items are LEGENDARY
 		int damage; // keyword BLADE is present if the most important item stat is damage
@@ -337,14 +461,18 @@ int main()
 		int manaRegeneration;
 		int isPotion; // 0 if it's not instantly consumed
 		cin >> itemName >> itemCost >> damage >> health >> maxHealth >> mana >> maxMana >> moveSpeed >> manaRegeneration >> isPotion; cin.ignore();
+		store.insert(Item(itemName, itemCost, damage, health, maxHealth, mana, maxMana, moveSpeed, manaRegeneration, isPotion));
+	}
+
+	for (multiset<Item>::iterator it = store.begin(); it != store.end(); ++it)
+	{
+		cerr << it->itemName << " " << it->itemCost << " " << it->damage << " " << it->health << " " << it->maxHealth << (it->isPotion ? " Pot" : "") << endl;
 	}
 
 	// game loop
 	while (1)
 	{
-		int gold;
-		cin >> gold; cin.ignore();
-		int enemyGold;
+		cin >> myGold; cin.ignore();
 		cin >> enemyGold; cin.ignore();
 		int roundType; // a positive value will show the number of heroes that await a command
 		cin >> roundType; cin.ignore();
@@ -352,8 +480,9 @@ int main()
 		cin >> entityCount; cin.ignore();
 
 		// Reset enemy distance
-		closestEnemy.location.x = -1000000;
-		closestEnemy.location.y = -1000000;
+		closestEnemy.location.x = MAX_X * 3;
+		closestEnemy.location.y = MAX_Y * 3;
+		closestEnemy.unitId = -1;
 
 		for (int i = 0; i < entityCount; i++)
 		{
@@ -382,7 +511,7 @@ int main()
 			cin >> unitId >> team >> unitType >> x >> y >> attackRange >> health >> maxHealth >> shield >> attackDamage >> movementSpeed >> stunDuration >> goldValue >> countDown1 >> countDown2 >> countDown3 >> mana >> maxMana >> manaRegeneration >> heroType >> isVisible >> itemsOwned; cin.ignore();
 
 			Unit e = Unit(unitType, Location(x, y), unitId, team==myTeam, attackRange, health, maxHealth, shield, attackDamage, movementSpeed, stunDuration, goldValue, countDown1, countDown2, countDown3, mana, maxMana, manaRegeneration, heroType, isVisible, itemsOwned);
-			cerr << e << endl;
+//			cerr << e << endl;
 			if (team != myTeam)
 			{
 				if (unitType == "TOWER")
@@ -410,6 +539,16 @@ int main()
 				if (unitType == "TOWER")
 				{
 					myTower = e;
+
+					// Set home location to the edge
+			/*		if (myTower.location.x < 500)
+					{
+						myTower.location.x = 30;
+					}
+					else
+					{
+						myTower.location.x = MAX_X-30;
+					}*/
 				}
 				else if (unitType == "HERO")
 				{
