@@ -541,14 +541,14 @@ int main()
 					myTower = e;
 
 					// Set home location to the edge
-			/*		if (myTower.location.x < 500)
+					if (myTower.location.x < 500)
 					{
 						myTower.location.x = 30;
 					}
 					else
 					{
 						myTower.location.x = MAX_X-30;
-					}*/
+					}
 				}
 				else if (unitType == "HERO")
 				{
