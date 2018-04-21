@@ -43,6 +43,14 @@ var friendly Descriptor
 var enemy Descriptor
 var queen Descriptor
 var tower Descriptor
+var noOwner Descriptor
+var goldmine Descriptor
+var barracks Descriptor
+var knight Descriptor
+var archer Descriptor
+var giant Descriptor
+var buildOrder []Site
+var buildOrderIndex int
 var gold int
 var touchedSite int
 
@@ -84,29 +92,59 @@ func initializeDescriptors() {
 	friendly.description = "Friendly"
 	enemy.index = 1
 	enemy.description = "Enemy"
+	noOwner.index = -1
+	noOwner.description = "None"
 	queen.index = -1
 	queen.description = "QUEEN"
 	tower.index = 1
-	tower.description = "Tower"
+	tower.description = "TOWER"
+	goldmine.index = 0
+	goldmine.description = "MINE"
+	barracks.index = 2
+	barracks.description = "BARRACKS"
+	knight.index = 0
+	knight.description = "KNIGHT"
+	archer.index = 1
+	archer.description = "ARCHER"
+	giant.index = 2
+	giant.description = "GIANT"
 }
 
 func initializeStrings() {
 	unitType[queen.index] = queen.description
-	unitType[0] = "KNIGHT"
-	unitType[1] = "ARCHER"
-	unitType[2] = "GIANT"
-	owner[-1] = "None"
+	unitType[knight.index] = knight.description
+	unitType[archer.index] = archer.description
+	unitType[giant.index] = giant.description
+	owner[noOwner.index] = noOwner.description
 	owner[friendly.index] = friendly.description
 	owner[enemy.index] = enemy.description
 	siteType[-1] = "No structure"
+	siteType[goldmine.index] = goldmine.description
 	siteType[tower.index] = tower.description
-	siteType[2] = "Barracks"
+	siteType[barracks.index] = barracks.description
+}
+
+func initializeBuildOrder() {
+	buildOrderIndex = 0
+	buildOrder = make([]Site, 0, 10)
+	var nextSite Site
+	nextSite.Type = goldmine.index
+	buildOrder = append(buildOrder, nextSite)
+	nextSite.Type = barracks.index
+	nextSite.Param2 = knight.index
+	buildOrder = append(buildOrder, nextSite)
+	nextSite.Type = barracks.index
+	nextSite.Param2 = archer.index
+	buildOrder = append(buildOrder, nextSite)
+	nextSite.Type = tower.index
+	buildOrder = append(buildOrder, nextSite)
 }
 
 func initialize() {
 	initializeDescriptors()
 	initializeMaps()
 	initializeStrings()
+	initializeBuildOrder()
 	gold = 0
 	touchedSite = -1
 }
@@ -137,10 +175,10 @@ func closestNonfriendlySite(toUnit Unit) Site {
 }
 
 func closestFriendlyTower(toUnit Unit) (Site, error) {
-	return closestSiteWith(toUnit, friendly, tower)
+	return closestSiteOwnerType(toUnit, friendly, tower)
 }
 
-func closestSiteWith(toUnit Unit, owner Descriptor, structureType Descriptor) (Site, error) {
+func closestSiteOwnerType(toUnit Unit, owner Descriptor, structureType Descriptor) (Site, error) {
 	unitLocation := toUnit.Location
 	leastDistance := 100000
 	siteFound := false
@@ -158,6 +196,28 @@ func closestSiteWith(toUnit Unit, owner Descriptor, structureType Descriptor) (S
 
 	if !siteFound {
 		return site, fmt.Errorf("No %v %v site found", owner.description, structureType.description)
+	}
+	return site, nil
+}
+
+func closestSiteOwner(toUnit Unit, owner Descriptor) (Site, error) {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	siteFound := false
+	var site Site
+	for _, v := range sites {
+		if v.Owner == owner.index {
+			thisDistance := distance(unitLocation, v.Location)
+			if thisDistance < leastDistance {
+				leastDistance = thisDistance
+				site = v
+				siteFound = true
+			}
+		}
+	}
+
+	if !siteFound {
+		return site, fmt.Errorf("No %v site found", owner.description)
 	}
 	return site, nil
 }
@@ -279,15 +339,47 @@ func main() {
 		threat := closestUnit(myQueen)
 		queenAction := ""
 		retreat := false
-		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
-			retreatTo, err := closestSiteWith(myQueen, friendly, tower)
-			if err != nil {
-				retreat = true
-				queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+		closeSite := closestSite(myQueen)
+		touchingClosestSite := distance(myQueen.Location, closeSite.Location) < 1
+		if !touchingClosestSite {
+			if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
+				var retreatTo Site
+				var err error
+				retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
+				if err != nil {
+					retreat = true
+					queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+				} else {
+					retreatTo, err = closestSiteOwner(myQueen, friendly)
+					if err != nil {
+						retreat = true
+						queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+					} else {
+						retreatTo, err = closestSiteOwner(myQueen, noOwner)
+						if err != nil {
+							retreat = true
+							queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+						}
+					}
+				}
 			}
 		}
 		if !retreat {
-			queenAction = "BUILD " + strconv.Itoa(closestNonfriendlySite(myQueen).Id) + " BARRACKS-KNIGHT"
+			buildStructure := buildOrder[buildOrderIndex]
+			buildString := siteType[buildStructure.Type]
+			if buildStructure.Type == barracks.index {
+				buildString += "-" + unitType[buildStructure.Param2]
+			}
+			buildSite := closestNonfriendlySite(myQueen)
+			touchingBuildSite := distance(myQueen.Location, buildSite.Location) < 1
+
+			queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
+			if touchingBuildSite {
+				buildOrderIndex++
+				if buildOrderIndex >= len(buildOrder) {
+					buildOrderIndex = 0
+				}
+			}
 		}
 
 		// First line: A valid queen action
