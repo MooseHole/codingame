@@ -53,6 +53,7 @@ var buildOrder []Site
 var buildOrderIndex int
 var gold int
 var touchedSite int
+var previousSite int
 
 func coordinateString(coordinate Coordinate) string {
 	return "[" + strconv.Itoa(coordinate.x) + ", " + strconv.Itoa(coordinate.y) + "(" + strconv.Itoa(coordinate.radius) + ")" + "]"
@@ -138,6 +139,9 @@ func initializeBuildOrder() {
 	buildOrder = append(buildOrder, nextSite)
 	nextSite.Type = tower.index
 	buildOrder = append(buildOrder, nextSite)
+	nextSite.Type = barracks.index
+	nextSite.Param2 = giant.index
+	buildOrder = append(buildOrder, nextSite)
 }
 
 func initialize() {
@@ -147,6 +151,7 @@ func initialize() {
 	initializeBuildOrder()
 	gold = 0
 	touchedSite = -1
+	previousSite = -1
 }
 
 func distance(start, end Coordinate) int {
@@ -339,47 +344,54 @@ func main() {
 		threat := closestUnit(myQueen)
 		queenAction := ""
 		retreat := false
-		closeSite := closestSite(myQueen)
-		touchingClosestSite := distance(myQueen.Location, closeSite.Location) < 1
-		if !touchingClosestSite {
-			if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
-				var retreatTo Site
-				var err error
-				retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
-				if err != nil {
+		//		closeSite := closestSite(myQueen)
+		//		touchingClosestSite := distance(myQueen.Location, closeSite.Location) < 1
+		//		if !touchingClosestSite {
+		//		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
+		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < 60 {
+			fmt.Fprintln(os.Stderr, "Retreat")
+			var retreatTo Site
+			var err error
+			retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
+			if err == nil {
+				retreat = true
+				queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+			} else {
+				fmt.Fprintln(os.Stderr, "Didn't retreat A because %v", err)
+				retreatTo, err = closestSiteOwner(myQueen, friendly)
+				if err == nil {
 					retreat = true
 					queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
 				} else {
-					retreatTo, err = closestSiteOwner(myQueen, friendly)
-					if err != nil {
+					fmt.Fprintln(os.Stderr, "Didn't retreat B because %v", err)
+					retreatTo, err = closestSiteOwner(myQueen, noOwner)
+					if err == nil {
+						fmt.Fprintln(os.Stderr, "Didn't retreat C because %v", err)
 						retreat = true
 						queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
-					} else {
-						retreatTo, err = closestSiteOwner(myQueen, noOwner)
-						if err != nil {
-							retreat = true
-							queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
-						}
 					}
 				}
 			}
 		}
+		//		}
 		if !retreat {
+			fmt.Fprintln(os.Stderr, "Advance")
 			buildStructure := buildOrder[buildOrderIndex]
 			buildString := siteType[buildStructure.Type]
 			if buildStructure.Type == barracks.index {
 				buildString += "-" + unitType[buildStructure.Param2]
 			}
 			buildSite := closestNonfriendlySite(myQueen)
-			touchingBuildSite := distance(myQueen.Location, buildSite.Location) < 1
 
 			queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
-			if touchingBuildSite {
+			if previousSite >= 0 && buildSite.Id != previousSite {
 				buildOrderIndex++
 				if buildOrderIndex >= len(buildOrder) {
 					buildOrderIndex = 0
 				}
 			}
+
+			previousSite = buildSite.Id
 		}
 
 		// First line: A valid queen action
