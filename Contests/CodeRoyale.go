@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"os"
+	"math"
 	"strconv"
 )
 
@@ -30,6 +30,7 @@ type Site struct {
 	Owner    int
 	Param1   int
 	Param2   int
+	Cost     int
 }
 
 var unitType map[int]string
@@ -37,6 +38,8 @@ var siteType map[int]string
 var owner map[int]string
 var units map[string][]Unit
 var sites map[int]Site
+var gold int
+var touchedSite int
 
 func coordinateString(coordinate Coordinate) string {
 	return "[" + strconv.Itoa(coordinate.x) + ", " + strconv.Itoa(coordinate.y) + "(" + strconv.Itoa(coordinate.radius) + ")" + "]"
@@ -80,6 +83,71 @@ func initializeStrings() {
 func initialize() {
 	initializeMaps()
 	initializeStrings()
+	gold = 0
+	touchedSite = -1
+}
+
+func distance(start, end Coordinate) int {
+	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - start.radius - end.radius
+}
+
+func sameLocation(start, end Coordinate) bool {
+	return start.x == end.x && start.y == end.y
+}
+
+func closestNonfriendlySite(toUnit Unit) Site {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	var site Site
+	for _, v := range sites {
+		if !sameLocation(unitLocation, v.Location) && owner[v.Owner] != "Friendly" {
+			thisDistance := distance(unitLocation, v.Location)
+			if thisDistance < leastDistance {
+				leastDistance = thisDistance
+				site = v
+			}
+		}
+	}
+
+	return site
+}
+
+// The closest site to the given unit
+func closestSite(toUnit Unit) Site {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	var site Site
+	for _, v := range sites {
+		if !sameLocation(unitLocation, v.Location) {
+			thisDistance := distance(unitLocation, v.Location)
+			if thisDistance < leastDistance {
+				leastDistance = thisDistance
+				site = v
+			}
+		}
+	}
+
+	return site
+}
+
+// The closest unit to the given unit
+func closestUnit(toUnit Unit) Unit {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	var unit Unit
+	for _, v := range units {
+		for _, u := range v {
+			if !sameLocation(unitLocation, u.Location) {
+				thisDistance := distance(unitLocation, u.Location)
+				if thisDistance < leastDistance {
+					leastDistance = thisDistance
+					unit = u
+				}
+			}
+		}
+	}
+
+	return unit
 }
 
 /**
@@ -100,7 +168,6 @@ func main() {
 	for {
 		clearUnits()
 		// touchedSite: -1 if none
-		var gold, touchedSite int
 		fmt.Scan(&gold, &touchedSite)
 
 		for i := 0; i < numSites; i++ {
@@ -111,6 +178,13 @@ func main() {
 			var site Site
 			fmt.Scan(&site.Id, &site.Ignore1, &site.Ignore2, &site.Type, &site.Owner, &site.Param1, &site.Param2)
 			site.Location = sites[site.Id].Location
+			site.Cost = 0
+			if unitType[site.Param2] == "KNIGHT" {
+				site.Cost = 80
+			}
+			if unitType[site.Param2] == "ARCHER" {
+				site.Cost = 100
+			}
 			sites[site.Id] = site
 		}
 		var numUnits int
@@ -122,22 +196,31 @@ func main() {
 			unit.Location.radius = 30
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
+		/*
+			for _, v := range units {
+				for _, u := range v {
+					fmt.Fprintln(os.Stderr, unitString(u))
+				}
+			}
 
-		for _, v := range units {
-			for _, u := range v {
-				fmt.Fprintln(os.Stderr, unitString(u))
+			for _, v := range sites {
+				fmt.Fprintln(os.Stderr, siteString(v))
+			}
+		*/
+		trainString := ""
+		for _, v := range sites {
+			if owner[v.Owner] == "Friendly" {
+				if v.Cost <= gold && v.Param1 == 0 {
+					trainString += " " + strconv.Itoa(v.Id)
+					gold -= v.Cost
+				}
 			}
 		}
-
-		for _, v := range sites {
-			fmt.Fprintln(os.Stderr, siteString(v))
-		}
-
 		// fmt.Fprintln(os.Stderr, "Debug messages...")
 
 		// First line: A valid queen action
 		// Second line: A set of training instructions
-		fmt.Println("WAIT")
-		fmt.Println("TRAIN")
+		fmt.Println("BUILD " + strconv.Itoa(closestNonfriendlySite(units["Friendly QUEEN"][0]).Id) + " BARRACKS-KNIGHT")
+		fmt.Println("TRAIN" + trainString)
 	}
 }
