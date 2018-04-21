@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 )
 
@@ -38,6 +39,10 @@ var siteType map[int]string
 var owner map[int]string
 var units map[string][]Unit
 var sites map[int]Site
+var friendly Descriptor
+var enemy Descriptor
+var queen Descriptor
+var tower Descriptor
 var gold int
 var touchedSite int
 
@@ -46,7 +51,7 @@ func coordinateString(coordinate Coordinate) string {
 }
 
 func unitGroupIdentifier(unit Unit) string {
-	return owner[unit.Owner] + " " + unitType[unit.Type]
+	return owner[unit.Owner] + unitType[unit.Type]
 }
 
 func unitString(unit Unit) string {
@@ -69,18 +74,37 @@ func initializeMaps() {
 	sites = make(map[int]Site)
 }
 
+type Descriptor struct {
+	index       int
+	description string
+}
+
+func initializeDescriptors() {
+	friendly.index = 0
+	friendly.description = "Friendly"
+	enemy.index = 1
+	enemy.description = "Enemy"
+	queen.index = -1
+	queen.description = "QUEEN"
+	tower.index = 1
+	tower.description = "Tower"
+}
+
 func initializeStrings() {
-	unitType[-1] = "QUEEN"
+	unitType[queen.index] = queen.description
 	unitType[0] = "KNIGHT"
 	unitType[1] = "ARCHER"
+	unitType[2] = "GIANT"
 	owner[-1] = "None"
-	owner[0] = "Friendly"
-	owner[1] = "Enemy"
+	owner[friendly.index] = friendly.description
+	owner[enemy.index] = enemy.description
 	siteType[-1] = "No structure"
+	siteType[tower.index] = tower.description
 	siteType[2] = "Barracks"
 }
 
 func initialize() {
+	initializeDescriptors()
 	initializeMaps()
 	initializeStrings()
 	gold = 0
@@ -100,7 +124,7 @@ func closestNonfriendlySite(toUnit Unit) Site {
 	leastDistance := 100000
 	var site Site
 	for _, v := range sites {
-		if !sameLocation(unitLocation, v.Location) && owner[v.Owner] != "Friendly" {
+		if v.Owner != friendly.index {
 			thisDistance := distance(unitLocation, v.Location)
 			if thisDistance < leastDistance {
 				leastDistance = thisDistance
@@ -110,6 +134,32 @@ func closestNonfriendlySite(toUnit Unit) Site {
 	}
 
 	return site
+}
+
+func closestFriendlyTower(toUnit Unit) (Site, error) {
+	return closestSiteWith(toUnit, friendly, tower)
+}
+
+func closestSiteWith(toUnit Unit, owner Descriptor, structureType Descriptor) (Site, error) {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	siteFound := false
+	var site Site
+	for _, v := range sites {
+		if v.Owner == owner.index && v.Type == structureType.index {
+			thisDistance := distance(unitLocation, v.Location)
+			if thisDistance < leastDistance {
+				leastDistance = thisDistance
+				site = v
+				siteFound = true
+			}
+		}
+	}
+
+	if !siteFound {
+		return site, fmt.Errorf("No %v %v site found", owner.description, structureType.description)
+	}
+	return site, nil
 }
 
 // The closest site to the given unit
@@ -150,6 +200,18 @@ func closestUnit(toUnit Unit) Unit {
 	return unit
 }
 
+func printEntities() {
+	for _, v := range units {
+		for _, u := range v {
+			fmt.Fprintln(os.Stderr, unitString(u))
+		}
+	}
+
+	for _, v := range sites {
+		fmt.Fprintln(os.Stderr, siteString(v))
+	}
+}
+
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
@@ -185,6 +247,9 @@ func main() {
 			if unitType[site.Param2] == "ARCHER" {
 				site.Cost = 100
 			}
+			if unitType[site.Param2] == "GIANT" {
+				site.Cost = 140
+			}
 			sites[site.Id] = site
 		}
 		var numUnits int
@@ -196,31 +261,38 @@ func main() {
 			unit.Location.radius = 30
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
-		/*
-			for _, v := range units {
-				for _, u := range v {
-					fmt.Fprintln(os.Stderr, unitString(u))
-				}
-			}
 
-			for _, v := range sites {
-				fmt.Fprintln(os.Stderr, siteString(v))
-			}
-		*/
+		// printEntities()
+
 		trainString := ""
 		for _, v := range sites {
-			if owner[v.Owner] == "Friendly" {
+			if v.Owner == friendly.index {
 				if v.Cost <= gold && v.Param1 == 0 {
 					trainString += " " + strconv.Itoa(v.Id)
 					gold -= v.Cost
 				}
 			}
 		}
-		// fmt.Fprintln(os.Stderr, "Debug messages...")
+
+		myQueen := units[friendly.description+queen.description][0]
+
+		threat := closestUnit(myQueen)
+		queenAction := ""
+		retreat := false
+		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
+			retreatTo, err := closestSiteWith(myQueen, friendly, tower)
+			if err != nil {
+				retreat = true
+				queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+			}
+		}
+		if !retreat {
+			queenAction = "BUILD " + strconv.Itoa(closestNonfriendlySite(myQueen).Id) + " BARRACKS-KNIGHT"
+		}
 
 		// First line: A valid queen action
 		// Second line: A set of training instructions
-		fmt.Println("BUILD " + strconv.Itoa(closestNonfriendlySite(units["Friendly QUEEN"][0]).Id) + " BARRACKS-KNIGHT")
+		fmt.Println(queenAction)
 		fmt.Println("TRAIN" + trainString)
 	}
 }
