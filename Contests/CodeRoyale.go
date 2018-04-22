@@ -23,15 +23,15 @@ type Unit struct {
 }
 
 type Site struct {
-	Id       int
-	Location Coordinate
-	Ignore1  int
-	Ignore2  int
-	Type     int
-	Owner    int
-	Param1   int
-	Param2   int
-	Cost     int
+	Id          int
+	Location    Coordinate
+	Gold        int
+	MaxMineSize int
+	Type        int
+	Owner       int
+	Param1      int
+	Param2      int
+	Cost        int
 }
 
 var unitType map[int]string
@@ -68,7 +68,17 @@ func unitString(unit Unit) string {
 }
 
 func siteString(site Site) string {
-	return owner[site.Owner] + " " + siteType[site.Type] + coordinateString(site.Location) + unitType[site.Param2] + " T:" + strconv.Itoa(site.Param1)
+	returnString := owner[site.Owner] + " " + siteType[site.Type] + coordinateString(site.Location)
+	if site.Type == barracks.index {
+		returnString += unitType[site.Param2] + " Turns:" + strconv.Itoa(site.Param1)
+	}
+	if site.Type == tower.index {
+		returnString += " HP:" + strconv.Itoa(site.Param1) + " Radius:" + strconv.Itoa(site.Param2)
+	}
+	if site.Type == goldmine.index {
+		returnString += " Income:" + strconv.Itoa(site.Param1) + " Max:" + strconv.Itoa(site.MaxMineSize) + " Left:" + strconv.Itoa(site.Gold)
+	}
+	return returnString
 }
 
 func clearUnits() {
@@ -134,14 +144,30 @@ func initializeBuildOrder() {
 	nextSite.Type = barracks.index
 	nextSite.Param2 = knight.index
 	buildOrder = append(buildOrder, nextSite)
-	nextSite.Type = barracks.index
-	nextSite.Param2 = archer.index
-	buildOrder = append(buildOrder, nextSite)
 	nextSite.Type = tower.index
 	buildOrder = append(buildOrder, nextSite)
 	nextSite.Type = barracks.index
-	nextSite.Param2 = giant.index
+	nextSite.Param2 = archer.index
 	buildOrder = append(buildOrder, nextSite)
+}
+
+func getSpecialBarracksParam2() Descriptor {
+	enemyTowers := 0
+	enemyKnightBarracks := 0
+	for _, s := range sites {
+		if s.Owner == enemy.index {
+			if s.Type == tower.index {
+				enemyTowers++
+			} else if s.Type == barracks.index && s.Param2 == knight.index {
+				enemyKnightBarracks++
+			}
+		}
+	}
+	if enemyTowers > enemyKnightBarracks {
+		return giant
+	}
+
+	return archer
 }
 
 func initialize() {
@@ -298,21 +324,17 @@ func main() {
 		fmt.Scan(&gold, &touchedSite)
 
 		for i := 0; i < numSites; i++ {
-			// ignore1: used in future leagues
-			// ignore2: used in future leagues
-			// structureType: -1 = No structure, 2 = Barracks
-			// owner: -1 = No structure, 0 = Friendly, 1 = Enemy
 			var site Site
-			fmt.Scan(&site.Id, &site.Ignore1, &site.Ignore2, &site.Type, &site.Owner, &site.Param1, &site.Param2)
+			fmt.Scan(&site.Id, &site.Gold, &site.MaxMineSize, &site.Type, &site.Owner, &site.Param1, &site.Param2)
 			site.Location = sites[site.Id].Location
 			site.Cost = 0
-			if unitType[site.Param2] == "KNIGHT" {
+			if site.Param2 == knight.index {
 				site.Cost = 80
 			}
-			if unitType[site.Param2] == "ARCHER" {
+			if site.Param2 == archer.index {
 				site.Cost = 100
 			}
-			if unitType[site.Param2] == "GIANT" {
+			if site.Param2 == giant.index {
 				site.Cost = 140
 			}
 			sites[site.Id] = site
@@ -379,12 +401,27 @@ func main() {
 			buildStructure := buildOrder[buildOrderIndex]
 			buildString := siteType[buildStructure.Type]
 			if buildStructure.Type == barracks.index {
+				if buildStructure.Param2 != knight.index {
+					buildStructure.Param2 = getSpecialBarracksParam2().index
+				}
 				buildString += "-" + unitType[buildStructure.Param2]
 			}
 			buildSite := closestNonfriendlySite(myQueen)
+			nextSiteOk := true
+			if sites[previousSite].Type == goldmine.index {
+				fmt.Fprintln(os.Stderr, "Previous was goldmine")
+				closestMine, err := closestSiteOwnerType(myQueen, friendly, goldmine)
+				fmt.Fprintln(os.Stderr, "closestMine %v err %v", siteString(closestMine), err)
+				if err == nil && closestMine.MaxMineSize > closestMine.Param1 {
+					fmt.Fprintln(os.Stderr, "Upgrading this mine %d %d", closestMine.MaxMineSize, closestMine.Param1)
+					buildSite = closestMine
+					nextSiteOk = false
+				}
+			}
 
 			queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
-			if previousSite >= 0 && buildSite.Id != previousSite {
+			// If build is complete
+			if nextSiteOk && previousSite >= 0 && buildSite.Id != previousSite {
 				buildOrderIndex++
 				if buildOrderIndex >= len(buildOrder) {
 					buildOrderIndex = 0
