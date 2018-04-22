@@ -188,12 +188,12 @@ func sameLocation(start, end Coordinate) bool {
 	return start.x == end.x && start.y == end.y
 }
 
-func closestNonfriendlySite(toUnit Unit) Site {
+func closestNonfriendlyNontowerSite(toUnit Unit) Site {
 	unitLocation := toUnit.Location
 	leastDistance := 100000
 	var site Site
 	for _, v := range sites {
-		if v.Owner != friendly.index {
+		if v.Owner != friendly.index && v.Type != tower.index {
 			thisDistance := distance(unitLocation, v.Location)
 			if thisDistance < leastDistance {
 				leastDistance = thisDistance
@@ -406,7 +406,7 @@ func main() {
 				}
 				buildString += "-" + unitType[buildStructure.Param2]
 			}
-			buildSite := closestNonfriendlySite(myQueen)
+			buildSite := closestNonfriendlyNontowerSite(myQueen)
 			nextSiteOk := true
 			if sites[previousSite].Type == goldmine.index {
 				fmt.Fprintln(os.Stderr, "Previous was goldmine")
