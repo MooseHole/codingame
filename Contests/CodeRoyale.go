@@ -20,6 +20,9 @@ type Unit struct {
 	Location Coordinate
 	Owner    int
 	Health   int
+	Range    int
+	Speed    int
+	Mass     int
 }
 
 type Site struct {
@@ -32,6 +35,8 @@ type Site struct {
 	Param1      int
 	Param2      int
 	Cost        int
+	Production  int
+	BuildTime   int
 }
 
 var unitType map[int]string
@@ -330,12 +335,18 @@ func main() {
 			site.Cost = 0
 			if site.Param2 == knight.index {
 				site.Cost = 80
+				site.Production = 4
+				site.BuildTime = 5
 			}
 			if site.Param2 == archer.index {
 				site.Cost = 100
+				site.Production = 2
+				site.BuildTime = 8
 			}
 			if site.Param2 == giant.index {
 				site.Cost = 140
+				site.Production = 1
+				site.BuildTime = 10
 			}
 			sites[site.Id] = site
 		}
@@ -345,19 +356,49 @@ func main() {
 		for i := 0; i < numUnits; i++ {
 			var unit Unit
 			fmt.Scan(&unit.Location.x, &unit.Location.y, &unit.Owner, &unit.Type, &unit.Health)
-			unit.Location.radius = 30
+			if unit.Type == queen.index {
+				unit.Location.radius = 30
+				unit.Speed = 60
+			} else if unit.Type == knight.index {
+				unit.Location.radius = 20
+				unit.Speed = 100
+				unit.Mass = 400
+				unit.Health = 30
+			} else if unit.Type == archer.index {
+				unit.Location.radius = 25
+				unit.Speed = 75
+				unit.Range = 200
+				unit.Mass = 900
+				unit.Health = 45
+			} else if unit.Type == giant.index {
+				unit.Location.radius = 40
+				unit.Speed = 50
+				unit.Mass = 2000
+				unit.Health = 200
+			}
+
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
 
 		// printEntities()
 
 		trainString := ""
+		longestBuildTime := 0
+		sitesToConsider := make([]Site, 0, len(sites))
 		for _, v := range sites {
-			if v.Owner == friendly.index {
-				if v.Cost <= gold && v.Param1 == 0 {
-					trainString += " " + strconv.Itoa(v.Id)
-					gold -= v.Cost
+			// If my barracks and ready to build
+			if v.Owner == friendly.index && v.Type == barracks.index && v.Param1 == 0 {
+				if v.BuildTime > longestBuildTime {
+					longestBuildTime = v.BuildTime
+					sitesToConsider = append(sitesToConsider, v)
 				}
+			}
+		}
+		for _, v := range sitesToConsider {
+			// If can afford
+			if v.BuildTime == longestBuildTime && v.Cost <= gold {
+				trainString += " " + strconv.Itoa(v.Id)
+				gold -= v.Cost
 			}
 		}
 
