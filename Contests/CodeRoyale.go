@@ -59,6 +59,7 @@ var buildOrderIndex int
 var gold int
 var touchedSite int
 var previousSite int
+var myQueen Unit
 
 func coordinateString(coordinate Coordinate) string {
 	return "[" + strconv.Itoa(coordinate.x) + ", " + strconv.Itoa(coordinate.y) + "(" + strconv.Itoa(coordinate.radius) + ")" + "]"
@@ -156,23 +157,124 @@ func initializeBuildOrder() {
 	buildOrder = append(buildOrder, nextSite)
 }
 
-func getSpecialBarracksParam2() Descriptor {
+func getTraining() string {
+	trainString := ""
+	longestBuildTime := 0
+	sitesToConsider := make([]Site, 0, len(sites))
 	enemyTowers := 0
-	enemyKnightBarracks := 0
-	for _, s := range sites {
-		if s.Owner == enemy.index {
-			if s.Type == tower.index {
-				enemyTowers++
-			} else if s.Type == barracks.index && s.Param2 == knight.index {
-				enemyKnightBarracks++
+	for _, v := range sites {
+		if v.Owner == enemy.index && v.Type == tower.index {
+			enemyTowers++
+		}
+	}
+	enemyKnights := len(units[enemy.description+knight.description])
+
+	for _, v := range sites {
+		// If my barracks and ready to build
+		if v.Owner == friendly.index && v.Type == barracks.index && v.Param1 == 0 {
+			if v.Param2 == giant.index && enemyTowers <= 3 {
+				continue
+			}
+			if v.Param2 == archer.index && enemyKnights == 0 {
+				continue
+			}
+			if v.BuildTime > longestBuildTime {
+				longestBuildTime = v.BuildTime
+				sitesToConsider = append(sitesToConsider, v)
 			}
 		}
 	}
-	if enemyTowers > enemyKnightBarracks {
-		return giant
+	for _, v := range sitesToConsider {
+		// If can afford
+		if v.BuildTime == longestBuildTime && v.Cost <= gold {
+			trainString += " " + strconv.Itoa(v.Id)
+			gold -= v.Cost
+		}
 	}
 
-	return archer
+	return trainString
+}
+
+func getSiteToBuild() Site {
+	closestMine, err := closestSiteOwnerType(myQueen, friendly, goldmine)
+	if err == nil && closestMine.MaxMineSize > closestMine.Param1 {
+		return closestMine
+	}
+	/*	closestTower, err := closestSiteOwnerType(myQueen, friendly, tower)
+		if err == nil && closestTower.MaxMineSize > closestTower.Param1 {
+			return closestTower
+		}
+	*/
+
+	myMines := 0
+	myTowers := 0
+	myKnightBarracks := 0
+	myArcherBarracks := 0
+	myGiantBarracks := 0
+	enemyKnightBarracks := 0
+	enemyTowers := 0
+	for _, s := range sites {
+		if s.Owner == friendly.index {
+			switch buildingType := s.Type; buildingType {
+			case goldmine.index:
+				myMines++
+			case tower.index:
+				myTowers++
+			case barracks.index:
+				switch creep := s.Param2; creep {
+				case knight.index:
+					myKnightBarracks++
+				case archer.index:
+					myArcherBarracks++
+				case giant.index:
+					myGiantBarracks++
+				}
+			}
+		} else if s.Owner == enemy.index {
+			switch buildingType := s.Type; buildingType {
+			case tower.index:
+				enemyTowers++
+			case barracks.index:
+				if s.Param2 == knight.index {
+					enemyKnightBarracks++
+				}
+			}
+		}
+	}
+
+	site := closestNonfriendlyNontowerSite(myQueen)
+	if myMines == 0 {
+		site.Type = goldmine.index
+		return site
+	} else if myKnightBarracks == 0 {
+		site.Type = barracks.index
+		site.Param2 = knight.index
+		return site
+	} else if myTowers == 0 {
+		site.Type = tower.index
+		return site
+	} else if enemyKnightBarracks > 3 && myArcherBarracks == 0 {
+		site.Type = barracks.index
+		site.Param2 = archer.index
+		return site
+	} else if enemyTowers > 3 && myGiantBarracks == 0 {
+		site.Type = barracks.index
+		site.Param2 = giant.index
+		return site
+	} else if myMines <= myTowers {
+		site.Type = goldmine.index
+		return site
+	} else if myTowers <= myKnightBarracks {
+		site.Type = tower.index
+		return site
+	} else if myKnightBarracks <= 3 {
+		site.Type = barracks.index
+		site.Param2 = knight.index
+		return site
+	} else {
+		site.Type = goldmine.index
+		return site
+	}
 }
 
 func initialize() {
@@ -308,11 +410,6 @@ func printEntities() {
 	}
 }
 
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
-
 func main() {
 	initialize()
 	var numSites int
@@ -380,37 +477,11 @@ func main() {
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
 
-		// printEntities()
-
-		trainString := ""
-		longestBuildTime := 0
-		sitesToConsider := make([]Site, 0, len(sites))
-		for _, v := range sites {
-			// If my barracks and ready to build
-			if v.Owner == friendly.index && v.Type == barracks.index && v.Param1 == 0 {
-				if v.BuildTime > longestBuildTime {
-					longestBuildTime = v.BuildTime
-					sitesToConsider = append(sitesToConsider, v)
-				}
-			}
-		}
-		for _, v := range sitesToConsider {
-			// If can afford
-			if v.BuildTime == longestBuildTime && v.Cost <= gold {
-				trainString += " " + strconv.Itoa(v.Id)
-				gold -= v.Cost
-			}
-		}
-
-		myQueen := units[friendly.description+queen.description][0]
+		myQueen = units[friendly.description+queen.description][0]
 
 		threat := closestUnit(myQueen)
 		queenAction := ""
 		retreat := false
-		//		closeSite := closestSite(myQueen)
-		//		touchingClosestSite := distance(myQueen.Location, closeSite.Location) < 1
-		//		if !touchingClosestSite {
-		//		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < distance(myQueen.Location, closestNonfriendlySite(myQueen).Location) {
 		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < 60 {
 			fmt.Fprintln(os.Stderr, "Retreat")
 			var retreatTo Site
@@ -418,63 +489,30 @@ func main() {
 			retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
 			if err == nil {
 				retreat = true
-				queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+				queenAction = "BUILD " + strconv.Itoa(retreatTo.Id) + " " + tower.description
 			} else {
 				fmt.Fprintln(os.Stderr, "Didn't retreat A because %v", err)
 				retreatTo, err = closestSiteOwner(myQueen, friendly)
 				if err == nil {
 					retreat = true
 					queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
-				} else {
-					fmt.Fprintln(os.Stderr, "Didn't retreat B because %v", err)
-					retreatTo, err = closestSiteOwner(myQueen, noOwner)
-					if err == nil {
-						fmt.Fprintln(os.Stderr, "Didn't retreat C because %v", err)
-						retreat = true
-						queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
-					}
 				}
 			}
 		}
-		//		}
 		if !retreat {
 			fmt.Fprintln(os.Stderr, "Advance")
-			buildStructure := buildOrder[buildOrderIndex]
-			buildString := siteType[buildStructure.Type]
-			if buildStructure.Type == barracks.index {
-				if buildStructure.Param2 != knight.index {
-					buildStructure.Param2 = getSpecialBarracksParam2().index
-				}
-				buildString += "-" + unitType[buildStructure.Param2]
-			}
-			buildSite := closestNonfriendlyNontowerSite(myQueen)
-			nextSiteOk := true
-			if sites[previousSite].Type == goldmine.index {
-				fmt.Fprintln(os.Stderr, "Previous was goldmine")
-				closestMine, err := closestSiteOwnerType(myQueen, friendly, goldmine)
-				fmt.Fprintln(os.Stderr, "closestMine %v err %v", siteString(closestMine), err)
-				if err == nil && closestMine.MaxMineSize > closestMine.Param1 {
-					fmt.Fprintln(os.Stderr, "Upgrading this mine %d %d", closestMine.MaxMineSize, closestMine.Param1)
-					buildSite = closestMine
-					nextSiteOk = false
-				}
-			}
 
+			buildSite := getSiteToBuild()
+			buildString := siteType[buildSite.Type]
+			if buildSite.Type == barracks.index {
+				buildString += "-" + unitType[buildSite.Param2]
+			}
 			queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
-			// If build is complete
-			if nextSiteOk && previousSite >= 0 && buildSite.Id != previousSite {
-				buildOrderIndex++
-				if buildOrderIndex >= len(buildOrder) {
-					buildOrderIndex = 0
-				}
-			}
-
-			previousSite = buildSite.Id
 		}
 
 		// First line: A valid queen action
 		// Second line: A set of training instructions
 		fmt.Println(queenAction)
-		fmt.Println("TRAIN" + trainString)
+		fmt.Println("TRAIN" + getTraining())
 	}
 }
