@@ -54,11 +54,8 @@ var barracks Descriptor
 var knight Descriptor
 var archer Descriptor
 var giant Descriptor
-var buildOrder []Site
-var buildOrderIndex int
 var gold int
 var touchedSite int
-var previousSite int
 var myQueen Unit
 
 func coordinateString(coordinate Coordinate) string {
@@ -139,22 +136,6 @@ func initializeStrings() {
 	siteType[goldmine.index] = goldmine.description
 	siteType[tower.index] = tower.description
 	siteType[barracks.index] = barracks.description
-}
-
-func initializeBuildOrder() {
-	buildOrderIndex = 0
-	buildOrder = make([]Site, 0, 10)
-	var nextSite Site
-	nextSite.Type = goldmine.index
-	buildOrder = append(buildOrder, nextSite)
-	nextSite.Type = barracks.index
-	nextSite.Param2 = knight.index
-	buildOrder = append(buildOrder, nextSite)
-	nextSite.Type = tower.index
-	buildOrder = append(buildOrder, nextSite)
-	nextSite.Type = barracks.index
-	nextSite.Param2 = archer.index
-	buildOrder = append(buildOrder, nextSite)
 }
 
 func getTraining() string {
@@ -281,14 +262,16 @@ func initialize() {
 	initializeDescriptors()
 	initializeMaps()
 	initializeStrings()
-	initializeBuildOrder()
 	gold = 0
 	touchedSite = -1
-	previousSite = -1
 }
 
 func distance(start, end Coordinate) int {
 	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - start.radius - end.radius
+}
+
+func distanceSpecifyRadius(start Coordinate, startRadius int, end Coordinate, endRadius int) int {
+	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - startRadius - endRadius
 }
 
 func sameLocation(start, end Coordinate) bool {
@@ -398,6 +381,28 @@ func closestUnit(toUnit Unit) Unit {
 	return unit
 }
 
+// The closest unit with the opposing owner to the given unit
+func closestOpposingUnit(toUnit Unit) (Unit, int) {
+	unitLocation := toUnit.Location
+	leastDistance := 100000
+	var unit Unit
+	var index int
+	for _, v := range units {
+		for i, u := range v {
+			if u.Owner != toUnit.Owner {
+				thisDistance := distance(unitLocation, u.Location)
+				if thisDistance < leastDistance {
+					leastDistance = thisDistance
+					unit = u
+					index = i
+				}
+			}
+		}
+	}
+
+	return unit, index
+}
+
 func printEntities() {
 	for _, v := range units {
 		for _, u := range v {
@@ -408,6 +413,89 @@ func printEntities() {
 	for _, v := range sites {
 		fmt.Fprintln(os.Stderr, siteString(v))
 	}
+}
+
+var stepunits map[string][]Unit
+var stepsites map[int]Site
+var stepgold int
+var simulationBuild Site
+var simulationMove Coordinate
+var simulationTrain []int
+
+func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate {
+	if distanceSpecifyRadius(mover.Location, moverRadius, destination, destination.radius) <= 0 {
+		return mover.Location
+	}
+
+	var angleFinder Coordinate
+	angleFinder.x = mover.Location.x - destination.x
+	angleFinder.y = mover.Location.y - destination.y
+	angle := math.Atan2(float64(angleFinder.y), float64(angleFinder.x))
+
+	mover.Location.x = int(float64(mover.Speed) * math.Cos(angle))
+	mover.Location.y = int(float64(mover.Speed) * math.Sin(angle))
+
+	return mover.Location
+}
+
+func step() {
+	for _, v := range stepunits {
+		for i, u := range v {
+			damage := 1
+			targetTeam := friendly
+			targetType := queen.description
+			if u.Owner == friendly.index {
+				targetTeam = enemy
+			}
+			if u.Type == knight.index {
+				u.Location = moveToward(u, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
+				if distance(u.Location, stepunits[targetTeam.description+targetType][0].Location) <= 0 {
+					stepunits[targetTeam.description+targetType][0].Health = stepunits[targetTeam.description+targetType][0].Health - damage
+				}
+				stepunits[unitGroupIdentifier(u)][i] = u
+			} else if u.Type == archer.index {
+				targetUnit, targetUnitIndex := closestOpposingUnit(u)
+				targetType := unitType[targetUnit.Type]
+				damage = 2
+				if targetUnit.Type == giant.index {
+					damage = 10
+				}
+
+				u.Location = moveToward(u, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
+				if distanceSpecifyRadius(u.Location, u.Range, targetUnit.Location, targetUnit.Location.radius) <= 0 {
+					stepunits[targetTeam.description+targetType][targetUnitIndex].Health = stepunits[targetTeam.description+targetType][targetUnitIndex].Health - damage
+				}
+				stepunits[unitGroupIdentifier(u)][i] = u
+			} else if u.Type == giant.index {
+				damage = 80
+				targetSite, err := closestSiteOwnerType(u, targetTeam, tower)
+				if err != nil {
+					u.Location = moveToward(u, stepsites[targetSite.Id].Location, u.Location.radius)
+					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
+						targetSite.Param1 = targetSite.Param1 - damage
+						stepsites[targetSite.Id] = targetSite
+					}
+					stepunits[unitGroupIdentifier(u)][i] = u
+				}
+			}
+		}
+	}
+}
+
+func initializeSimulation() {
+	for k, v := range units {
+		for _, u := range v {
+			stepunits[k] = append(stepunits[k], u)
+		}
+	}
+	for k, v := range sites {
+		stepsites[k] = v
+	}
+	stepgold = gold
+}
+
+func simulate() {
+
 }
 
 func main() {
