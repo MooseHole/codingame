@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"strconv"
 )
@@ -48,6 +49,7 @@ var friendly Descriptor
 var enemy Descriptor
 var queen Descriptor
 var tower Descriptor
+var noStructure Descriptor
 var noOwner Descriptor
 var goldmine Descriptor
 var barracks Descriptor
@@ -116,6 +118,8 @@ func initializeDescriptors() {
 	goldmine.description = "MINE"
 	barracks.index = 2
 	barracks.description = "BARRACKS"
+	noStructure.index = -1
+	noStructure.description = "No Structure"
 	knight.index = 0
 	knight.description = "KNIGHT"
 	archer.index = 1
@@ -132,7 +136,7 @@ func initializeStrings() {
 	owner[noOwner.index] = noOwner.description
 	owner[friendly.index] = friendly.description
 	owner[enemy.index] = enemy.description
-	siteType[-1] = "No structure"
+	siteType[noStructure.index] = noStructure.description
 	siteType[goldmine.index] = goldmine.description
 	siteType[tower.index] = tower.description
 	siteType[barracks.index] = barracks.description
@@ -475,10 +479,70 @@ func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate 
 	angleFinder.y = mover.Location.y - destination.y
 	angle := math.Atan2(float64(angleFinder.y), float64(angleFinder.x))
 
-	mover.Location.x = int(float64(mover.Speed) * math.Cos(angle))
-	mover.Location.y = int(float64(mover.Speed) * math.Sin(angle))
+	mover.Location.x -= int(float64(mover.Speed) * math.Cos(angle))
+	mover.Location.y -= int(float64(mover.Speed) * math.Sin(angle))
 
 	return mover.Location
+}
+
+func stepQueen() {
+	q := stepunits[friendly.description+queen.description][0]
+	if simulationBuild.Id >= 0 {
+		q.Location = moveToward(q, simulationBuild.Location, q.Location.radius)
+		if distance(q.Location, simulationBuild.Location) <= 0 {
+			thisSite := stepsites[simulationBuild.Id]
+			if !(thisSite.Owner == enemy.index && thisSite.Type == tower.index) {
+				thisSite = simulationBuild
+				thisSite.Owner = friendly.index
+				if thisSite.Type == barracks.index {
+					if thisSite.Param2 == knight.index {
+						thisSite.Cost = 80
+						thisSite.Production = 4
+						thisSite.BuildTime = 5
+					}
+					if thisSite.Param2 == archer.index {
+						thisSite.Cost = 100
+						thisSite.Production = 2
+						thisSite.BuildTime = 8
+					}
+					if thisSite.Param2 == giant.index {
+						thisSite.Cost = 140
+						thisSite.Production = 1
+						thisSite.BuildTime = 10
+					}
+				} else if thisSite.Type == tower.index {
+					thisSite.Param1 += 100
+					thisSite.Param2 += 100
+				} else if thisSite.Type == goldmine.index {
+					if thisSite.Param1 < thisSite.MaxMineSize {
+						if thisSite.Param1 > 0 {
+							thisSite.Param1++
+						} else {
+							thisSite.Param1 = 1
+						}
+					}
+					if thisSite.Gold <= 0 {
+						thisSite.Gold = 1000
+					}
+				}
+				stepsites[simulationBuild.Id] = thisSite
+			}
+		}
+	} else if simulationMove.x >= 0 {
+		q.Location = moveToward(q, simulationMove, 0)
+	}
+	stepunits[friendly.description+queen.description][0] = q
+
+	for t := range simulationTrain {
+		trainSite := stepsites[t]
+		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && trainSite.Param1 < 1 {
+			if stepgold >= trainSite.Cost {
+				stepgold = stepgold - trainSite.Cost
+				trainSite.Param1 = trainSite.BuildTime
+			}
+		}
+		stepsites[t] = trainSite
+	}
 }
 
 func stepSites() {
@@ -517,7 +581,7 @@ func stepSites() {
 					}
 
 					for i := 0; i < v.Production; i++ {
-						stepunits[unitString(newUnit)] = append(stepunits[unitString(newUnit)], newUnit)
+						stepunits[unitGroupIdentifier(newUnit)] = append(stepunits[unitGroupIdentifier(newUnit)], newUnit)
 					}
 				}
 				v.Param1 = newTurnsLeft
@@ -532,7 +596,7 @@ func stepSites() {
 					}
 				}
 				unit.Health = unit.Health - damage
-				stepunits[unitString(unit)][index] = unit
+				stepunits[unitGroupIdentifier(unit)][index] = unit
 			}
 		}
 	}
@@ -640,6 +704,8 @@ func stepRemoveDead() {
 }
 
 func initializeSimulation() {
+	stepunits = make(map[string][]Unit)
+	stepsites = make(map[int]Site)
 	for k, v := range units {
 		for _, u := range v {
 			stepunits[k] = append(stepunits[k], u)
@@ -651,9 +717,168 @@ func initializeSimulation() {
 	stepgold = gold
 }
 
-func simulate() {
-	initializeSimulation()
+func simulationScore() int {
+	score := 0
+	simulationMyQueen := stepunits[friendly.description+queen.description][0]
+	simulationEnemyQueen := stepunits[enemy.description+queen.description][0]
 
+	// If win
+	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
+		score = score + 1000000
+	}
+
+	score = score + simulationMyQueen.Health*100
+	score = score + simulationEnemyQueen.Health*-100
+	score = score + len(stepunits[friendly.description+knight.description])*2
+	score = score + len(stepunits[friendly.description+archer.description])
+	score = score + len(stepunits[friendly.description+giant.description])
+	for _, v := range stepsites {
+		if v.Owner == friendly.index {
+			if v.Type == goldmine.index {
+				score = score + v.Param1*100
+			} else if v.Type == tower.index {
+				score = score + 1
+			} else if v.Type == barracks.index {
+				score = score + 1
+			}
+		} else {
+			if v.Type == goldmine.index {
+				score = score - v.Param1*100
+			} else if v.Type == tower.index {
+				score = score - 1
+			} else if v.Type == barracks.index {
+				score = score - 1
+			}
+		}
+	}
+
+	return score
+}
+
+func simulate() {
+	maxScore := -1000000
+	simulationBuild.Id = -1
+	simulationMove.x = -1
+	simulationTrain = nil
+
+	var bestBuild = simulationBuild
+	var bestMove = simulationMove
+	var bestTrain = simulationTrain
+
+	initializeSimulation()
+	for i := 0; i < 20; i++ {
+		stepQueen()
+		stepCreeps()
+		stepSites()
+	}
+	stepRemoveDead()
+	thisScore := simulationScore()
+	if maxScore < thisScore {
+		maxScore = thisScore
+		bestBuild = simulationBuild
+		bestMove = simulationMove
+		bestTrain = simulationTrain
+	}
+
+	simulationMove.x = -1
+	for _, v := range stepsites {
+		simulationBuild = v
+		simulationBuild.Type = goldmine.index
+		simulationTrain = rand.Perm(len(stepsites))
+		initializeSimulation()
+		for i := 0; i < 20; i++ {
+			stepQueen()
+			stepCreeps()
+			stepSites()
+		}
+		stepRemoveDead()
+		thisScore = simulationScore()
+		if maxScore < thisScore {
+			maxScore = thisScore
+			bestBuild = simulationBuild
+			bestMove = simulationMove
+			bestTrain = simulationTrain
+		}
+
+		simulationBuild = v
+		simulationBuild.Type = tower.index
+		simulationTrain = rand.Perm(len(stepsites))
+		initializeSimulation()
+		for i := 0; i < 20; i++ {
+			stepQueen()
+			stepCreeps()
+			stepSites()
+		}
+		stepRemoveDead()
+		thisScore = simulationScore()
+		if maxScore < thisScore {
+			maxScore = thisScore
+			bestBuild = simulationBuild
+			bestMove = simulationMove
+			bestTrain = simulationTrain
+		}
+
+		simulationBuild = v
+		simulationBuild.Type = barracks.index
+		simulationBuild.Param2 = knight.index
+		simulationTrain = rand.Perm(len(stepsites))
+		initializeSimulation()
+		for i := 0; i < 20; i++ {
+			stepQueen()
+			stepCreeps()
+			stepSites()
+		}
+		stepRemoveDead()
+		thisScore = simulationScore()
+		if maxScore < thisScore {
+			maxScore = thisScore
+			bestBuild = simulationBuild
+			bestMove = simulationMove
+			bestTrain = simulationTrain
+		}
+
+		simulationBuild = v
+		simulationBuild.Type = barracks.index
+		simulationBuild.Param2 = archer.index
+		simulationTrain = rand.Perm(len(stepsites))
+		initializeSimulation()
+		for i := 0; i < 20; i++ {
+			stepQueen()
+			stepCreeps()
+			stepSites()
+		}
+		stepRemoveDead()
+		thisScore = simulationScore()
+		if maxScore < thisScore {
+			maxScore = thisScore
+			bestBuild = simulationBuild
+			bestMove = simulationMove
+			bestTrain = simulationTrain
+		}
+
+		simulationBuild = v
+		simulationBuild.Type = barracks.index
+		simulationBuild.Param2 = giant.index
+		simulationTrain = rand.Perm(len(stepsites))
+		initializeSimulation()
+		for i := 0; i < 20; i++ {
+			stepQueen()
+			stepCreeps()
+			stepSites()
+		}
+		stepRemoveDead()
+		thisScore = simulationScore()
+		if maxScore < thisScore {
+			maxScore = thisScore
+			bestBuild = simulationBuild
+			bestMove = simulationMove
+			bestTrain = simulationTrain
+		}
+	}
+
+	simulationBuild = bestBuild
+	simulationMove = bestMove
+	simulationTrain = bestTrain
 }
 
 func main() {
@@ -722,43 +947,63 @@ func main() {
 
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
+		/*
+			myQueen = units[friendly.description+queen.description][0]
 
-		myQueen = units[friendly.description+queen.description][0]
-
-		threat := closestUnit(myQueen)
-		queenAction := ""
-		retreat := false
-		if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < 60 {
-			fmt.Fprintln(os.Stderr, "Retreat")
-			var retreatTo Site
-			var err error
-			retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
-			if err == nil {
-				retreat = true
-				queenAction = "BUILD " + strconv.Itoa(retreatTo.Id) + " " + tower.description
-			} else {
-				fmt.Fprintln(os.Stderr, "Didn't retreat A because %v", err)
-				retreatTo, err = closestSiteOwner(myQueen, friendly)
+			threat := closestUnit(myQueen)
+			queenAction := ""
+			retreat := false
+			if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < 60 {
+				fmt.Fprintln(os.Stderr, "Retreat")
+				var retreatTo Site
+				var err error
+				retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
 				if err == nil {
 					retreat = true
-					queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+					queenAction = "BUILD " + strconv.Itoa(retreatTo.Id) + " " + tower.description
+				} else {
+					fmt.Fprintln(os.Stderr, "Didn't retreat A because %v", err)
+					retreatTo, err = closestSiteOwner(myQueen, friendly)
+					if err == nil {
+						retreat = true
+						queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
+					}
 				}
 			}
-		}
-		if !retreat {
-			fmt.Fprintln(os.Stderr, "Advance")
+			if !retreat {
+				fmt.Fprintln(os.Stderr, "Advance")
 
-			buildSite := getSiteToBuild()
-			buildString := siteType[buildSite.Type]
-			if buildSite.Type == barracks.index {
-				buildString += "-" + unitType[buildSite.Param2]
+				buildSite := getSiteToBuild()
+				buildString := siteType[buildSite.Type]
+				if buildSite.Type == barracks.index {
+					buildString += "-" + unitType[buildSite.Param2]
+				}
+				queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
 			}
-			queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
-		}
 
-		// First line: A valid queen action
-		// Second line: A set of training instructions
-		fmt.Println(queenAction)
-		fmt.Println("TRAIN" + getTraining())
+			// First line: A valid queen action
+			// Second line: A set of training instructions
+			fmt.Println(queenAction)
+			fmt.Println("TRAIN" + getTraining())
+		*/
+		simulate()
+		if simulationMove.x >= 0 {
+			fmt.Println("MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y))
+		} else if simulationBuild.Id >= 0 {
+			buildString := siteType[simulationBuild.Type]
+			if simulationBuild.Type == barracks.index {
+				buildString += "-" + unitType[simulationBuild.Param2]
+			}
+			fmt.Println("BUILD " + strconv.Itoa(simulationBuild.Id) + " " + buildString)
+		} else {
+			fmt.Println("WAIT")
+		}
+		trainString := ""
+		for i := range simulationTrain {
+			if sites[i].Owner == friendly.index && sites[i].Type == barracks.index {
+				trainString = trainString + " " + strconv.Itoa(i)
+			}
+		}
+		fmt.Println("TRAIN" + trainString)
 	}
 }
