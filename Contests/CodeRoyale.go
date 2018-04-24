@@ -381,16 +381,59 @@ func closestUnit(toUnit Unit) Unit {
 	return unit
 }
 
+// towerTarget returns the found unit, unit index, distance, and error
+func towerTarget(thisTower Site) (Unit, int, int, error) {
+	var unit Unit
+	if thisTower.Type != tower.index {
+		return unit, 0, 0, fmt.Errorf("towerTarget: Site %d is not a tower", thisTower.Id)
+	}
+
+	leastDistance := 100000
+	queenDistance := 100000
+	var index int
+	foundQueen := false
+	foundOtherUnit := false
+	for _, v := range units {
+		for i, u := range v {
+			if u.Owner != thisTower.Owner {
+				thisDistance := distance(thisTower.Location, u.Location)
+				if thisDistance < thisTower.Param2 {
+					if u.Type == queen.index {
+						foundQueen = true
+						if !foundOtherUnit {
+							queenDistance = thisDistance
+							unit = u
+							index = 0
+						}
+					} else if thisDistance < leastDistance {
+						foundOtherUnit = true
+						leastDistance = thisDistance
+						unit = u
+						index = i
+					}
+				}
+			}
+		}
+	}
+
+	if foundOtherUnit {
+		return unit, index, leastDistance, nil
+	} else if foundQueen {
+		return unit, index, queenDistance, nil
+	}
+
+	return unit, 0, 0, fmt.Errorf("Tower %d found no units in range", thisTower.Id)
+}
+
 // The closest unit with the opposing owner to the given unit
 func closestOpposingUnit(toUnit Unit) (Unit, int) {
-	unitLocation := toUnit.Location
 	leastDistance := 100000
 	var unit Unit
 	var index int
 	for _, v := range units {
 		for i, u := range v {
 			if u.Owner != toUnit.Owner {
-				thisDistance := distance(unitLocation, u.Location)
+				thisDistance := distance(toUnit.Location, u.Location)
 				if thisDistance < leastDistance {
 					leastDistance = thisDistance
 					unit = u
@@ -438,15 +481,78 @@ func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate 
 	return mover.Location
 }
 
-func step() {
+func stepSites() {
+	for i, v := range stepsites {
+		if v.Type == goldmine.index {
+			if v.Owner == friendly.index {
+				dug := int(math.Min(float64(v.Gold), float64(v.Param1)))
+				stepgold = stepgold + dug
+				v.Gold = v.Gold - dug
+				stepsites[i] = v
+			}
+		} else if v.Type == barracks.index {
+			if v.Param1 > 0 {
+				newTurnsLeft := v.Param1 - 1
+				if newTurnsLeft == 0 {
+					var newUnit Unit
+					newUnit.Location = v.Location
+					newUnit.Owner = v.Owner
+					newUnit.Type = v.Param2
+					if newUnit.Type == knight.index {
+						newUnit.Location.radius = 20
+						newUnit.Speed = 100
+						newUnit.Mass = 400
+						newUnit.Health = 30
+					} else if newUnit.Type == archer.index {
+						newUnit.Location.radius = 25
+						newUnit.Speed = 75
+						newUnit.Range = 200
+						newUnit.Mass = 900
+						newUnit.Health = 45
+					} else if newUnit.Type == giant.index {
+						newUnit.Location.radius = 40
+						newUnit.Speed = 50
+						newUnit.Mass = 2000
+						newUnit.Health = 200
+					}
+
+					for i := 0; i < v.Production; i++ {
+						stepunits[unitString(newUnit)] = append(stepunits[unitString(newUnit)], newUnit)
+					}
+				}
+				v.Param1 = newTurnsLeft
+				stepsites[i] = v
+			} else if v.Type == tower.index {
+				unit, index, distance, err := towerTarget(v)
+				damage := 0
+				if err == nil {
+					damage = 1 + (v.Param2-distance)/200
+					if unit.Type != queen.index {
+						damage = damage + 2
+					}
+				}
+				unit.Health = unit.Health - damage
+				stepunits[unitString(unit)][index] = unit
+			}
+		}
+	}
+}
+
+func stepCreeps() {
 	for _, v := range stepunits {
 		for i, u := range v {
+			// Aging
+			if u.Type != queen.index {
+				u.Health--
+			}
+
 			damage := 1
 			targetTeam := friendly
 			targetType := queen.description
 			if u.Owner == friendly.index {
 				targetTeam = enemy
 			}
+
 			if u.Type == knight.index {
 				u.Location = moveToward(u, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
 				if distance(u.Location, stepunits[targetTeam.description+targetType][0].Location) <= 0 {
@@ -482,6 +588,57 @@ func step() {
 	}
 }
 
+func stepRemoveDead() {
+	for _, v := range stepunits {
+		deleted := 0
+		for i := range v {
+			j := i - deleted
+			if v[j].Health <= 0 {
+				v = v[:j+copy(v[j:], v[j+1:])]
+				deleted++
+			}
+		}
+	}
+
+	for k, v := range stepsites {
+		if v.Type == tower.index && v.Param1 <= 0 {
+			var site Site
+			site.Id = v.Id
+			site.Location.x = v.Location.x
+			site.Location.y = v.Location.y
+			site.Location.radius = v.Location.radius
+			stepsites[k] = site
+		} else if v.Type == goldmine.index {
+			for _, uni := range stepunits {
+				for _, u := range uni {
+					if v.Owner != u.Owner && distance(v.Location, u.Location) <= 0 {
+						var site Site
+						site.Id = v.Id
+						site.Location.x = v.Location.x
+						site.Location.y = v.Location.y
+						site.Location.radius = v.Location.radius
+						stepsites[k] = site
+					}
+				}
+			}
+		} else if v.Type == barracks.index {
+			queenString := friendly.description
+			if v.Owner == friendly.index {
+				queenString = enemy.description
+			}
+			queenString = queenString + queen.description
+			if distance(v.Location, stepunits[queenString][0].Location) <= 0 {
+				var site Site
+				site.Id = v.Id
+				site.Location.x = v.Location.x
+				site.Location.y = v.Location.y
+				site.Location.radius = v.Location.radius
+				stepsites[k] = site
+			}
+		}
+	}
+}
+
 func initializeSimulation() {
 	for k, v := range units {
 		for _, u := range v {
@@ -495,6 +652,7 @@ func initializeSimulation() {
 }
 
 func simulate() {
+	initializeSimulation()
 
 }
 
