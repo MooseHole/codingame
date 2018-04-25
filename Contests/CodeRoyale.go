@@ -385,8 +385,8 @@ func closestUnit(toUnit Unit) Unit {
 	return unit
 }
 
-// towerTarget returns the found unit, unit index, distance, and error
-func towerTarget(thisTower Site) (Unit, int, int, error) {
+// stepTowerTarget searches stepunits returns the found unit, unit index, distance, and error
+func stepTowerTarget(thisTower Site) (Unit, int, int, error) {
 	var unit Unit
 	if thisTower.Type != tower.index {
 		return unit, 0, 0, fmt.Errorf("towerTarget: Site %d is not a tower", thisTower.Id)
@@ -397,7 +397,7 @@ func towerTarget(thisTower Site) (Unit, int, int, error) {
 	var index int
 	foundQueen := false
 	foundOtherUnit := false
-	for _, v := range units {
+	for _, v := range stepunits {
 		for i, u := range v {
 			if u.Owner != thisTower.Owner {
 				thisDistance := distance(thisTower.Location, u.Location)
@@ -604,13 +604,9 @@ func stepSites() {
 				}
 				v.Param1 = newTurnsLeft
 				stepsites[i] = v
-				//				fmt.Fprintln(os.Stderr, "barracksStepped", i, siteString(stepsites[i]))
-				//				fmt.Fprint(os.Stderr, ">>>", stepsites[i].Param1, v.Param1)
-			} else {
-				//				fmt.Fprintln(os.Stderr, "barracksNOTSTEPPED", i, siteString(stepsites[i]))
 			}
 		} else if v.Type == tower.index {
-			unit, index, distance, err := towerTarget(v)
+			unit, index, distance, err := stepTowerTarget(v)
 			damage := 0
 			if err == nil {
 				damage = 1 + (v.Param2-distance)/200
@@ -619,12 +615,14 @@ func stepSites() {
 				}
 				unit.Health = unit.Health - damage
 				stepunits[unitGroupIdentifier(unit)][index] = unit
+				if unit.Type == queen.index {
+					fmt.Fprintln(os.Stderr, "tower->queen", unitGroupIdentifier(unit), index, stepunits[unitGroupIdentifier(unit)][index])
+				}
 			}
 			v.Param1 -= 4
 			v.Param2 = int(math.Sqrt(float64(v.Param1*1000+v.Location.radius) / math.Pi))
 			stepsites[i] = v
 		}
-		//		fmt.Fprint(os.Stderr, ">>", stepsites[i].Param1)
 	}
 }
 
@@ -753,9 +751,9 @@ func simulationScore() int {
 	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
 		score = score + 1000000
 	}
+	score = score + simulationMyQueen.Health*100
+	score = score + simulationEnemyQueen.Health*-100
 	/*
-		score = score + simulationMyQueen.Health*100
-		score = score + simulationEnemyQueen.Health*-100
 
 		for _, v := range stepunits {
 			for _, u := range v {
@@ -819,10 +817,19 @@ func simulationScore() int {
 		}
 	}
 
-	if myMines == 0 || myKnightBarracks == 0 || myTowers == 0 {
-		score -= 10000
+	if myMines == 0 {
+		score -= 1000
 	}
-	if myArcherBarracks == 0 || myGiantBarracks == 0 {
+	if myKnightBarracks == 0 {
+		score -= 1000
+	}
+	if myTowers == 0 {
+		score -= 1000
+	}
+	if myArcherBarracks == 0 {
+		score -= 1000
+	}
+	if myGiantBarracks == 0 {
 		score -= 1000
 	}
 	/*
@@ -846,7 +853,7 @@ func simulationScore() int {
 		}
 	*/
 	//	fmt.Fprintln(os.Stderr, "score", score, simulationMyQueen.Health, simulationEnemyQueen.Health)
-	fmt.Fprintln(os.Stderr, "score", score, stepsites[simulationBuild.Id], simulationBuild, myMines, myTowers, myKnightBarracks, myArcherBarracks, myGiantBarracks, enemyKnightBarracks, enemyTowers)
+	fmt.Fprintln(os.Stderr, "score", score, stepsites[simulationBuild.Id], simulationBuild, myMines, myTowers, myKnightBarracks, myArcherBarracks, myGiantBarracks, enemyKnightBarracks, enemyTowers, simulationMyQueen, simulationEnemyQueen)
 	return score
 }
 
@@ -1067,7 +1074,10 @@ func main() {
 		trainString := ""
 		for i := range simulationTrain {
 			if sites[i].Owner == friendly.index && sites[i].Type == barracks.index {
-				trainString = trainString + " " + strconv.Itoa(i)
+				if sites[i].Cost <= gold {
+					trainString = trainString + " " + strconv.Itoa(i)
+					gold -= sites[i].Cost
+				}
 			}
 		}
 		fmt.Println("TRAIN" + trainString)
