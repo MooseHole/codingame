@@ -665,8 +665,8 @@ func simulationScore() int {
 		score -= 1000000
 		scordy += "B"
 	}
-	score = score + simulationMyQueen.Health*1
-	score = score + simulationEnemyQueen.Health*-1
+	score = score + simulationMyQueen.Health*100
+	score = score + simulationEnemyQueen.Health*-100
 
 	// Evaluate builds on existing buildings
 	if simulationBuild.Id >= 0 {
@@ -795,7 +795,7 @@ func simulateIterate() {
 }
 
 func simulate() {
-	maxScore = -1000000000
+	maxScore = math.MinInt32
 	simulationBuild.Id = -1
 	simulationMove.x = -1
 	simulationTrain = nil
