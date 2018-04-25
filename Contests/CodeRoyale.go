@@ -11,7 +11,36 @@ import (
 
 //import "os"
 
-var SimulateTurns = 30
+const simulateTurns int = 30
+const queenRadius int = 30
+const queenSpeed int = 60
+const knightRadius int = 20
+const knightSpeed int = 100
+const knightMass int = 400
+const knightHealth int = 30
+const knightCost int = 80
+const knightProduction int = 4
+const knightBuildTime int = 5
+const archerRadius int = 25
+const archerSpeed int = 75
+const archerMass int = 900
+const archerRange int = 200
+const archerHealth int = 45
+const archerCost int = 100
+const archerProduction int = 2
+const archerBuildTime int = 8
+const giantRadius int = 40
+const giantSpeed int = 50
+const giantMass int = 2000
+const giantHealth int = 200
+const giantCost int = 140
+const giantProduction int = 1
+const giantBuildTime int = 10
+const towerInitialHP int = 200
+const towerAddedHP int = 100
+const towerMaxHP int = 800
+const towerRangeCoefficient int = 1000
+const approximateGoldAmount int = 250
 
 type Coordinate struct {
 	x      int
@@ -75,16 +104,51 @@ func unitString(unit Unit) string {
 	return owner[unit.Owner] + " " + unitType[unit.Type] + coordinateString(unit.Location) + strconv.Itoa(unit.Health)
 }
 
+func barracksTurnsRemaining(s Site) int {
+	if s.Type == barracks.index {
+		return s.Param1
+	}
+	return -1
+}
+
+func barracksUnitType(s Site) int {
+	if s.Type == barracks.index {
+		return s.Param2
+	}
+	return -1
+}
+
+func towerHP(s Site) int {
+	if s.Type == tower.index {
+		return s.Param1
+	}
+	return -1
+}
+
+func towerAttackRadius(s Site) int {
+	if s.Type == tower.index {
+		return s.Param2
+	}
+	return -1
+}
+
+func goldmineIncome(s Site) int {
+	if s.Type == goldmine.index {
+		return s.Param1
+	}
+	return -1
+}
+
 func siteString(site Site) string {
 	returnString := owner[site.Owner] + " " + siteType[site.Type] + coordinateString(site.Location)
 	if site.Type == barracks.index {
-		returnString += unitType[site.Param2] + " Turns:" + strconv.Itoa(site.Param1)
+		returnString += unitType[barracksUnitType(site)] + " Turns:" + strconv.Itoa(barracksTurnsRemaining(site))
 	}
 	if site.Type == tower.index {
-		returnString += " HP:" + strconv.Itoa(site.Param1) + " Radius:" + strconv.Itoa(site.Param2)
+		returnString += " HP:" + strconv.Itoa(towerHP(site)) + " Radius:" + strconv.Itoa(towerAttackRadius(site))
 	}
 	if site.Type == goldmine.index {
-		returnString += " Income:" + strconv.Itoa(site.Param1) + " Max:" + strconv.Itoa(site.MaxMineSize) + " Left:" + strconv.Itoa(site.Gold)
+		returnString += " Income:" + strconv.Itoa(goldmineIncome(site)) + " Max:" + strconv.Itoa(site.MaxMineSize) + " Left:" + strconv.Itoa(site.Gold)
 	}
 	return returnString
 }
@@ -237,7 +301,7 @@ func stepTowerTarget(thisTower Site) (Unit, int, int, error) {
 		for i, u := range v {
 			if u.Owner != thisTower.Owner {
 				thisDistance := distance(thisTower.Location, u.Location)
-				if thisDistance < thisTower.Param2 {
+				if thisDistance < towerAttackRadius(thisTower) {
 					if u.Type == queen.index {
 						foundQueen = true
 						if !foundOtherUnit {
@@ -331,47 +395,47 @@ func stepQueen() {
 			if !(thisSite.Owner == enemy.index && thisSite.Type == tower.index) {
 				thisSite.Owner = friendly.index
 				if simulationBuild.Type == barracks.index {
-					thisSite.Param2 = simulationBuild.Param2
-					if thisSite.Param2 == knight.index {
-						thisSite.Cost = 80
-						thisSite.Production = 4
-						thisSite.BuildTime = 5
+					thisSite.Param2 = barracksUnitType(simulationBuild)
+					if barracksUnitType(thisSite) == knight.index {
+						thisSite.Cost = knightCost
+						thisSite.Production = knightProduction
+						thisSite.BuildTime = knightBuildTime
 					}
-					if thisSite.Param2 == archer.index {
-						thisSite.Cost = 100
-						thisSite.Production = 2
-						thisSite.BuildTime = 8
+					if barracksUnitType(thisSite) == archer.index {
+						thisSite.Cost = archerCost
+						thisSite.Production = archerProduction
+						thisSite.BuildTime = archerBuildTime
 					}
-					if thisSite.Param2 == giant.index {
-						thisSite.Cost = 140
-						thisSite.Production = 1
-						thisSite.BuildTime = 10
+					if barracksUnitType(thisSite) == giant.index {
+						thisSite.Cost = giantCost
+						thisSite.Production = giantProduction
+						thisSite.BuildTime = giantBuildTime
 					}
 				} else if simulationBuild.Type == tower.index {
 					if thisSite.Type == tower.index {
-						thisSite.Param1 += 100
-						if thisSite.Param1 > 800 {
-							thisSite.Param1 = 800
+						thisSite.Param1 += towerAddedHP
+						if towerHP(thisSite) > towerMaxHP {
+							thisSite.Param1 = towerMaxHP
 						}
 					} else {
-						thisSite.Param1 = 200
+						thisSite.Param1 = towerInitialHP
 					}
-					thisSite.Param2 = int(math.Sqrt(float64(thisSite.Param1*1000+thisSite.Location.radius) / math.Pi))
+					thisSite.Param2 = int(math.Sqrt(float64(towerHP(thisSite)*towerRangeCoefficient+thisSite.Location.radius) / math.Pi))
 				} else if simulationBuild.Type == goldmine.index {
+					// If already was a goldmine
 					if thisSite.Type == goldmine.index {
-						if thisSite.Param1 < thisSite.MaxMineSize {
-							if thisSite.Param1 > 0 {
+						if goldmineIncome(thisSite) < thisSite.MaxMineSize {
+							if goldmineIncome(thisSite) > 0 {
 								thisSite.Param1++
 							} else {
 								thisSite.Param1 = 1
 							}
 						}
-						if thisSite.Gold <= 0 {
-							thisSite.Gold = 1000
-						}
 					} else {
 						thisSite.Param1 = 1
-						thisSite.Gold = 1000
+						if thisSite.Gold < 0 {
+							thisSite.Gold = approximateGoldAmount
+						}
 					}
 				}
 				thisSite.Type = simulationBuild.Type
@@ -390,7 +454,7 @@ func stepQueen() {
 
 	for t := range simulationTrain {
 		trainSite := stepsites[t]
-		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && trainSite.Param1 < 1 {
+		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && barracksTurnsRemaining(trainSite) == 0 {
 			if stepgold >= trainSite.Cost {
 				stepgold = stepgold - trainSite.Cost
 				trainSite.Param1 = trainSite.BuildTime
@@ -405,35 +469,35 @@ func stepSites() {
 	for i, v := range stepsites {
 		if v.Type == goldmine.index {
 			if v.Owner == friendly.index {
-				dug := int(math.Min(float64(v.Gold), float64(v.Param1)))
+				dug := int(math.Min(float64(v.Gold), float64(goldmineIncome(v))))
 				stepgold = stepgold + dug
 				v.Gold = v.Gold - dug
 				stepsites[i] = v
 			}
 		} else if v.Type == barracks.index {
-			if v.Param1 > 0 {
-				newTurnsLeft := v.Param1 - 1
+			if barracksTurnsRemaining(v) > 0 {
+				newTurnsLeft := barracksTurnsRemaining(v) - 1
 				if newTurnsLeft == 0 {
 					var newUnit Unit
 					newUnit.Location = v.Location
 					newUnit.Owner = v.Owner
-					newUnit.Type = v.Param2
+					newUnit.Type = barracksUnitType(v)
 					if newUnit.Type == knight.index {
-						newUnit.Location.radius = 20
-						newUnit.Speed = 100
-						newUnit.Mass = 400
-						newUnit.Health = 30
+						newUnit.Location.radius = knightRadius
+						newUnit.Speed = knightSpeed
+						newUnit.Mass = knightMass
+						newUnit.Health = knightHealth
 					} else if newUnit.Type == archer.index {
-						newUnit.Location.radius = 25
-						newUnit.Speed = 75
-						newUnit.Range = 200
-						newUnit.Mass = 900
-						newUnit.Health = 45
+						newUnit.Location.radius = archerRadius
+						newUnit.Speed = archerSpeed
+						newUnit.Range = archerRange
+						newUnit.Mass = archerMass
+						newUnit.Health = archerHealth
 					} else if newUnit.Type == giant.index {
-						newUnit.Location.radius = 40
-						newUnit.Speed = 50
-						newUnit.Mass = 2000
-						newUnit.Health = 200
+						newUnit.Location.radius = giantRadius
+						newUnit.Speed = giantSpeed
+						newUnit.Mass = giantMass
+						newUnit.Health = giantHealth
 					}
 
 					for i := 0; i < v.Production; i++ {
@@ -448,7 +512,7 @@ func stepSites() {
 			unit, index, distance, err := stepTowerTarget(v)
 			damage := 0
 			if err == nil {
-				damage = 1 + (v.Param2-distance)/200
+				damage = 1 + (towerAttackRadius(v)-distance)/200
 				if unit.Type != queen.index {
 					damage = damage + 2
 				}
@@ -459,7 +523,7 @@ func stepSites() {
 				}
 			}
 			v.Param1 -= 4
-			v.Param2 = int(math.Sqrt(float64(v.Param1*1000+v.Location.radius) / math.Pi))
+			v.Param2 = int(math.Sqrt(float64(towerHP(v)*towerRangeCoefficient+v.Location.radius) / math.Pi))
 			stepsites[i] = v
 		}
 	}
@@ -507,7 +571,7 @@ func stepCreeps() {
 				if err != nil {
 					u.Location = moveToward(u, stepsites[targetSite.Id].Location, u.Location.radius)
 					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
-						targetSite.Param1 = targetSite.Param1 - damage
+						targetSite.Param1 = towerHP(targetSite) - damage
 						stepsites[targetSite.Id] = targetSite
 					}
 					stepunits[unitGroupIdentifier(u)][i] = u
@@ -530,7 +594,7 @@ func stepRemoveDead() {
 	}
 
 	for k, v := range stepsites {
-		if v.Type == tower.index && v.Param1 <= 0 {
+		if v.Type == tower.index && towerHP(v) <= 0 {
 			var site Site
 			site.Id = v.Id
 			site.Type = noStructure.index
@@ -632,7 +696,7 @@ func simulationScore() int {
 			} else if s.Type == tower.index {
 				myTowers++
 			} else if s.Type == barracks.index {
-				switch creep := s.Param2; creep {
+				switch creep := barracksUnitType(s); creep {
 				case knight.index:
 					myKnightBarracks++
 				case archer.index:
@@ -646,7 +710,7 @@ func simulationScore() int {
 			case tower.index:
 				enemyTowers++
 			case barracks.index:
-				if s.Param2 == knight.index {
+				if barracksUnitType(s) == knight.index {
 					enemyKnightBarracks++
 				}
 			}
@@ -680,7 +744,7 @@ var bestTrain []int
 func simulateIterate() {
 	initializeSimulation()
 	// Don't simulate 50 or more because tower hp=200-4*iteration
-	for i := 0; i < SimulateTurns; i++ {
+	for i := 0; i < simulateTurns; i++ {
 		//		fmt.Fprint(os.Stderr, "i", i)
 		stepQueen()
 		stepCreeps()
@@ -746,7 +810,7 @@ func simulate() {
 			continue
 		} else if v.Owner == friendly.index && v.Type == barracks.index {
 			continue
-		} else if v.Owner == friendly.index && v.Type == goldmine.index && v.Param1 >= v.MaxMineSize {
+		} else if v.Owner == friendly.index && v.Type == goldmine.index && goldmineIncome(v) >= v.MaxMineSize {
 			continue
 		}
 
@@ -850,20 +914,20 @@ func main() {
 			fmt.Scan(&site.Id, &site.Gold, &site.MaxMineSize, &site.Type, &site.Owner, &site.Param1, &site.Param2)
 			site.Location = sites[site.Id].Location
 			site.Cost = 0
-			if site.Param2 == knight.index {
-				site.Cost = 80
-				site.Production = 4
-				site.BuildTime = 5
+			if barracksUnitType(site) == knight.index {
+				site.Cost = knightCost
+				site.Production = knightProduction
+				site.BuildTime = knightBuildTime
 			}
-			if site.Param2 == archer.index {
-				site.Cost = 100
-				site.Production = 2
-				site.BuildTime = 8
+			if barracksUnitType(site) == archer.index {
+				site.Cost = archerCost
+				site.Production = archerProduction
+				site.BuildTime = archerBuildTime
 			}
-			if site.Param2 == giant.index {
-				site.Cost = 140
-				site.Production = 1
-				site.BuildTime = 10
+			if barracksUnitType(site) == giant.index {
+				site.Cost = giantCost
+				site.Production = giantProduction
+				site.BuildTime = giantBuildTime
 			}
 			sites[site.Id] = site
 		}
@@ -874,21 +938,21 @@ func main() {
 			var unit Unit
 			fmt.Scan(&unit.Location.x, &unit.Location.y, &unit.Owner, &unit.Type, &unit.Health)
 			if unit.Type == queen.index {
-				unit.Location.radius = 30
-				unit.Speed = 60
+				unit.Location.radius = queenRadius
+				unit.Speed = queenSpeed
 			} else if unit.Type == knight.index {
-				unit.Location.radius = 20
-				unit.Speed = 100
-				unit.Mass = 400
+				unit.Location.radius = knightRadius
+				unit.Speed = knightSpeed
+				unit.Mass = knightMass
 			} else if unit.Type == archer.index {
-				unit.Location.radius = 25
-				unit.Speed = 75
-				unit.Range = 200
-				unit.Mass = 900
+				unit.Location.radius = archerRadius
+				unit.Speed = archerSpeed
+				unit.Range = archerRange
+				unit.Mass = archerMass
 			} else if unit.Type == giant.index {
-				unit.Location.radius = 40
-				unit.Speed = 50
-				unit.Mass = 2000
+				unit.Location.radius = giantRadius
+				unit.Speed = giantSpeed
+				unit.Mass = giantMass
 			}
 
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
@@ -899,7 +963,7 @@ func main() {
 		if simulationBuild.Id >= 0 {
 			buildString := siteType[simulationBuild.Type]
 			if simulationBuild.Type == barracks.index {
-				buildString += "-" + unitType[simulationBuild.Param2]
+				buildString += "-" + unitType[barracksUnitType(simulationBuild)]
 			}
 			fmt.Println("BUILD " + strconv.Itoa(simulationBuild.Id) + " " + buildString)
 		} else if simulationMove.x >= 0 {
