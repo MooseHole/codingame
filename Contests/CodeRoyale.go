@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"sort"
 	"strconv"
 )
 
@@ -299,6 +300,34 @@ func closestNonfriendlyNontowerSite(toUnit Unit) Site {
 	return site
 }
 
+func closestNonfriendlyNontowerSiteIndex(toUnit Unit, index int) Site {
+	unitLocation := toUnit.Location
+
+	type distanceSite struct {
+		Distance int
+		St       Site
+	}
+
+	var distanceSites []distanceSite
+	for _, v := range sites {
+		if v.Owner != friendly.index && v.Type != tower.index {
+			var thisDistanceSite distanceSite
+			thisDistanceSite.Distance = distance(unitLocation, v.Location)
+			thisDistanceSite.St = v
+			distanceSites = append(distanceSites, thisDistanceSite)
+		}
+	}
+
+	sort.Slice(distanceSites, func(i, j int) bool {
+		return distanceSites[i].Distance < distanceSites[j].Distance
+	})
+
+	if index >= len(distanceSites) {
+		return distanceSites[len(distanceSites)-1].St
+	}
+	return distanceSites[index].St
+}
+
 func closestFriendlyTower(toUnit Unit) (Site, error) {
 	return closestSiteOwnerType(toUnit, friendly, tower)
 }
@@ -541,7 +570,7 @@ func stepQueen() {
 				thisSite.Type = simulationBuild.Type
 				stepsites[simulationBuild.Id] = thisSite
 				simulationBuilt = true
-				fmt.Fprintln(os.Stderr, "built", stepsites[simulationBuild.Id])
+				//				fmt.Fprintln(os.Stderr, "built", stepsites[simulationBuild.Id])
 			}
 		}
 	} else if simulationMove.x >= 0 {
@@ -616,7 +645,7 @@ func stepSites() {
 				unit.Health = unit.Health - damage
 				stepunits[unitGroupIdentifier(unit)][index] = unit
 				if unit.Type == queen.index {
-					fmt.Fprintln(os.Stderr, "tower->queen", unitGroupIdentifier(unit), index, stepunits[unitGroupIdentifier(unit)][index])
+					//					fmt.Fprintln(os.Stderr, "tower->queen", unitGroupIdentifier(unit), index, stepunits[unitGroupIdentifier(unit)][index])
 				}
 			}
 			v.Param1 -= 4
@@ -692,6 +721,7 @@ func stepRemoveDead() {
 		if v.Type == tower.index && v.Param1 <= 0 {
 			var site Site
 			site.Id = v.Id
+			site.Type = noStructure.index
 			site.Location.x = v.Location.x
 			site.Location.y = v.Location.y
 			site.Location.radius = v.Location.radius
@@ -702,6 +732,7 @@ func stepRemoveDead() {
 					if v.Owner != u.Owner && distance(v.Location, u.Location) <= 0 {
 						var site Site
 						site.Id = v.Id
+						site.Type = noStructure.index
 						site.Location.x = v.Location.x
 						site.Location.y = v.Location.y
 						site.Location.radius = v.Location.radius
@@ -718,6 +749,7 @@ func stepRemoveDead() {
 			if distance(v.Location, stepunits[queenString][0].Location) <= 0 {
 				var site Site
 				site.Id = v.Id
+				site.Type = noStructure.index
 				site.Location.x = v.Location.x
 				site.Location.y = v.Location.y
 				site.Location.radius = v.Location.radius
@@ -753,34 +785,6 @@ func simulationScore() int {
 	}
 	score = score + simulationMyQueen.Health*100
 	score = score + simulationEnemyQueen.Health*-100
-	/*
-
-		for _, v := range stepunits {
-			for _, u := range v {
-				multiplier := 1
-				if u.Owner == enemy.index {
-					multiplier = -1
-
-					if simulationBuild.Type == goldmine.index && distance(u.Location, simulationBuild.Location) < u.Speed {
-						score = score - 1000
-					}
-				}
-				score = score + u.Health*multiplier
-			}
-		}
-	*/
-	/*	score = score + len(stepunits[friendly.description+knight.description])*2
-		score = score + len(stepunits[friendly.description+archer.description])*1
-		score = score + len(stepunits[friendly.description+giant.description])*1
-		score = score - len(stepunits[enemy.description+knight.description])*2
-		score = score - len(stepunits[enemy.description+archer.description])*1
-		score = score - len(stepunits[enemy.description+giant.description])*1
-	*/
-	if stepgold > 500 && simulationBuild.Type == goldmine.index {
-		score = score - 1000
-	}
-
-	//	score = score - distance(myQueen.Location, simulationBuild.Location)*100 // Use current, real position of queen
 
 	myMines := 0
 	myTowers := 0
@@ -821,39 +825,17 @@ func simulationScore() int {
 		score -= 1000
 	}
 	if myKnightBarracks == 0 {
-		score -= 1000
+		score -= 999
 	}
 	if myTowers == 0 {
-		score -= 1000
+		score -= 898
 	}
 	if myArcherBarracks == 0 {
-		score -= 1000
+		score -= 497
 	}
 	if myGiantBarracks == 0 {
-		score -= 1000
+		score -= 496
 	}
-	/*
-		if myMines == 0 {
-			score -= 11000
-		}
-		if myKnightBarracks == 0 {
-			score -= 10000
-		}
-		if myTowers == 0 {
-			score -= 9000
-		}
-		if enemyKnightBarracks > 3 && myArcherBarracks == 0 {
-			score -= 8000
-		}
-		if enemyTowers > 3 && myGiantBarracks == 0 {
-			score -= 7000
-		}
-		if myKnightBarracks > 3 {
-			score -= 5000
-		}
-	*/
-	//	fmt.Fprintln(os.Stderr, "score", score, simulationMyQueen.Health, simulationEnemyQueen.Health)
-	fmt.Fprintln(os.Stderr, "score", score, stepsites[simulationBuild.Id], simulationBuild, myMines, myTowers, myKnightBarracks, myArcherBarracks, myGiantBarracks, enemyKnightBarracks, enemyTowers, simulationMyQueen, simulationEnemyQueen)
 	return score
 }
 
@@ -864,7 +846,8 @@ var bestTrain []int
 
 func simulateIterate() {
 	initializeSimulation()
-	for i := 0; i < 100; i++ {
+	// Don't simulate 50 or more because tower hp=200-4*iteration
+	for i := 0; i < 40; i++ {
 		//		fmt.Fprint(os.Stderr, "i", i)
 		stepQueen()
 		stepCreeps()
@@ -880,7 +863,7 @@ func simulateIterate() {
 		bestBuild = simulationBuild
 		bestMove = simulationMove
 		bestTrain = simulationTrain
-		fmt.Fprintln(os.Stderr, "HI", maxScore, bestBuild, bestTrain)
+		//		fmt.Fprintln(os.Stderr, "HI", maxScore, bestBuild, bestTrain)
 	}
 }
 
@@ -894,24 +877,26 @@ func simulate() {
 	bestMove = simulationMove
 	bestTrain = simulationTrain
 	initializeSimulation()
-	/*
-		simulateIterate()
-	*/
 	simulationMove.x = -1
 	simulationTrain = rand.Perm(len(stepsites))
 
 	considerSites := make([]Site, 0, len(stepsites))
-	consider, err := closestSiteOwnerType(myQueen, friendly, goldmine)
-	if err == nil {
-		considerSites = append(considerSites, consider)
-	}
-	considerSites = append(considerSites, closestNonfriendlyNontowerSite(myQueen))
-	consider, err = closestFriendlyTower(myQueen)
-	if err == nil {
-		considerSites = append(considerSites, consider)
+	if touchedSite >= 0 && stepsites[touchedSite].Owner == noOwner.index {
+		considerSites = append(considerSites, stepsites[touchedSite])
+	} else {
+		consider, err := closestSiteOwnerType(myQueen, friendly, goldmine)
+		if err == nil {
+			considerSites = append(considerSites, consider)
+		}
+		for i := 0; i < 3; i++ {
+			considerSites = append(considerSites, closestNonfriendlyNontowerSiteIndex(myQueen, i))
+		}
+		consider, err = closestFriendlyTower(myQueen)
+		if err == nil {
+			considerSites = append(considerSites, consider)
+		}
 	}
 
-	//	for _, v := range stepsites {
 	for _, v := range considerSites {
 		if v.Owner == enemy.index && v.Type == tower.index {
 			continue
@@ -928,7 +913,9 @@ func simulate() {
 		}
 
 		if v.Owner != friendly.index {
-			simulationTrain[0] = v.Id
+			if simulationTrain != nil {
+				simulationTrain[0] = v.Id
+			}
 			simulationBuild = v
 			simulationBuild.Type = barracks.index
 			simulationBuild.Param2 = knight.index
