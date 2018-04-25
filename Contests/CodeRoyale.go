@@ -941,6 +941,20 @@ func simulate() {
 
 	simulationBuild = bestBuild
 	simulationMove = bestMove
+
+	simulateIterate()
+	var trainingSites []int
+	for _, s := range stepsites {
+		// Do not only consider build time at 0.  It will be 0 during simulation and it may be good to wait.
+		if s.Owner == friendly.index && s.Type == barracks.index {
+			trainingSites = append(trainingSites, s.Id)
+		}
+	}
+	for _, t := range trainingSites {
+		simulationTrain = simulationTrain[:0]
+		simulationTrain = append(simulationTrain, t)
+		simulateIterate()
+	}
 	simulationTrain = bestTrain
 }
 
