@@ -101,7 +101,7 @@ func unitGroupIdentifier(unit Unit) string {
 }
 
 func unitString(unit Unit) string {
-	return owner[unit.Owner] + " " + unitType[unit.Type] + coordinateString(unit.Location) + strconv.Itoa(unit.Health)
+	return "[" + owner[unit.Owner] + " " + unitType[unit.Type] + coordinateString(unit.Location) + strconv.Itoa(unit.Health) + "]"
 }
 
 func barracksTurnsRemaining(s Site) int {
@@ -140,7 +140,7 @@ func goldmineIncome(s Site) int {
 }
 
 func siteString(site Site) string {
-	returnString := owner[site.Owner] + " " + siteType[site.Type] + coordinateString(site.Location)
+	returnString := "[" + strconv.Itoa(site.Id) + " " + owner[site.Owner] + " " + siteType[site.Type] + coordinateString(site.Location)
 	if site.Type == barracks.index {
 		returnString += unitType[barracksUnitType(site)] + " Turns:" + strconv.Itoa(barracksTurnsRemaining(site))
 	}
@@ -150,6 +150,7 @@ func siteString(site Site) string {
 	if site.Type == goldmine.index {
 		returnString += " Income:" + strconv.Itoa(goldmineIncome(site)) + " Max:" + strconv.Itoa(site.MaxMineSize) + " Left:" + strconv.Itoa(site.Gold)
 	}
+	returnString += "]"
 	return returnString
 }
 
@@ -654,32 +655,47 @@ func simulationScore() int {
 	score := 0
 	simulationMyQueen := stepunits[friendly.description+queen.description][0]
 	simulationEnemyQueen := stepunits[enemy.description+queen.description][0]
+	scordy := "&"
 
 	// If win
 	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
 		score += 1000000
+		scordy += "A"
 	} else if simulationEnemyQueen.Health > 0 && simulationMyQueen.Health <= 0 {
 		score -= 1000000
+		scordy += "B"
 	}
-	score = score + simulationMyQueen.Health*100
-	score = score + simulationEnemyQueen.Health*-100
+	score = score + simulationMyQueen.Health*1
+	score = score + simulationEnemyQueen.Health*-1
 
+	// Evaluate builds on existing buildings
 	if simulationBuild.Id >= 0 {
-		// Check from current queen location, not simulated
-		//		score = score - distance(myQueen.Location, simulationBuild.Location)
+		// Don't build goldmines if no gold is left
 		if simulationBuild.Type == goldmine.index && sites[simulationBuild.Id].Gold == 0 {
-			score -= 100
+			score -= 100000
+			scordy += "C"
 		}
+
+		// Don't replace your own barracks
 		if sites[simulationBuild.Id].Owner == friendly.index {
 			if sites[simulationBuild.Id].Type == barracks.index {
 				score -= 100
+				scordy += "D"
 			} else if sites[simulationBuild.Id].Type != simulationBuild.Type {
 				score -= 100
+				scordy += "E"
 			}
 		}
+
+		// Building on empty sites is good
 		if sites[simulationBuild.Id].Owner == noOwner.index {
 			score += 100
+			scordy += "F"
 		}
+	} else {
+		// Not building at all is bad
+		score -= 1000
+		scordy += "G"
 	}
 
 	myMines := 0
@@ -717,22 +733,36 @@ func simulationScore() int {
 		}
 	}
 
-	if myMines == 0 {
-		score -= 100000
+	if myMines < 3 {
+		score -= 100000 * (3 - myMines)
+		scordy += "H"
 	}
 	if myKnightBarracks == 0 {
 		score -= 9990
+		scordy += "I"
+	} else if myKnightBarracks < 2 {
+		score -= 1000
+		scordy += "J"
 	}
 	if myTowers == 0 {
-		score -= 8980
+		score -= 500
+		scordy += "K"
 	}
 	if myArcherBarracks == 0 {
-		score -= 4970
+		score -= 100
+		scordy += "L"
 	}
 	if myGiantBarracks == 0 {
-		score -= 4960
+		score -= 100
+		scordy += "M"
 	}
 
+	/*
+		if maxScore < score {
+			scordy = "^^" + scordy
+		}
+		fmt.Fprintln(os.Stderr, "score", score, scordy, siteString(simulationBuild), simulationMove, simulationTrain)
+	*/
 	return score
 }
 
@@ -765,7 +795,7 @@ func simulateIterate() {
 }
 
 func simulate() {
-	maxScore = -1000000
+	maxScore = -1000000000
 	simulationBuild.Id = -1
 	simulationMove.x = -1
 	simulationTrain = nil
@@ -847,6 +877,7 @@ func simulate() {
 		}
 	}
 
+	// Try moving after doing the build
 	simulationBuild = bestBuild
 	simulationMove.x = myQueen.Location.x
 	simulationMove.y = 0
@@ -861,6 +892,7 @@ func simulate() {
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
 
+	// Try moving without building
 	simulationBuild.Id = -1
 	simulationMove.x = myQueen.Location.x
 	simulationMove.y = 0
@@ -875,9 +907,9 @@ func simulate() {
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
 
+	// Set training sites to what they would be after doing best action
 	simulationBuild = bestBuild
 	simulationMove = bestMove
-
 	simulateIterate()
 	var trainingSites []int
 	for _, s := range stepsites {
@@ -886,11 +918,16 @@ func simulate() {
 			trainingSites = append(trainingSites, s.Id)
 		}
 	}
+
+	// Try building at each single barracks
 	for _, t := range trainingSites {
 		simulationTrain = simulationTrain[:0]
 		simulationTrain = append(simulationTrain, t)
 		simulateIterate()
 	}
+
+	simulationBuild = bestBuild
+	simulationMove = bestMove
 	simulationTrain = bestTrain
 }
 
