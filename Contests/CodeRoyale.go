@@ -11,6 +11,8 @@ import (
 
 //import "os"
 
+var SimulateTurns = 30
+
 type Coordinate struct {
 	x      int
 	y      int
@@ -176,12 +178,13 @@ type OwnerTypeDescriptors struct {
 var distanceSites []distanceSite
 var distanceSiteFrom Coordinate
 
-func sortSitesByDistance(toUnit Unit) {
+func sortSitesByDistance(toUnit Unit, force bool) {
 	// if distances already determined and storted
-	if toUnit.Location.x == distanceSiteFrom.x && toUnit.Location.y == distanceSiteFrom.y {
+	if !force && toUnit.Location.x == distanceSiteFrom.x && toUnit.Location.y == distanceSiteFrom.y {
 		return
 	}
 
+	distanceSites = distanceSites[:0]
 	distanceSiteFrom = toUnit.Location
 	for _, v := range sites {
 		var thisDistanceSite distanceSite
@@ -195,13 +198,13 @@ func sortSitesByDistance(toUnit Unit) {
 	})
 }
 
-func getSiteByDistanceDescriptorIndex(toUnit Unit, descriptors []OwnerTypeDescriptors, index int) (Site, error) {
-	sortSitesByDistance(toUnit)
+func getSiteByDistanceDescriptorIndex(toUnit Unit, descriptors []OwnerTypeDescriptors, index int, resort bool) (Site, error) {
+	sortSitesByDistance(toUnit, resort)
 	foundIndex := -1
-	for _, s := range sites {
+	for _, s := range distanceSites {
 		match := false
 		for _, d := range descriptors {
-			if s.Owner == d.Owner.index && s.Type == d.Type.index {
+			if s.St.Owner == d.Owner.index && s.St.Type == d.Type.index {
 				match = true
 				break
 			}
@@ -209,7 +212,7 @@ func getSiteByDistanceDescriptorIndex(toUnit Unit, descriptors []OwnerTypeDescri
 		if match {
 			foundIndex++
 			if foundIndex == index {
-				return s, nil
+				return s.St, nil
 			}
 		}
 	}
@@ -377,7 +380,10 @@ func stepQueen() {
 				//				fmt.Fprintln(os.Stderr, "built", stepsites[simulationBuild.Id])
 			}
 		}
-	} else if simulationMove.x >= 0 {
+	}
+
+	// If build and move, wait until built before moving
+	if simulationMove.x >= 0 {
 		q.Location = moveToward(q, simulationMove, 0)
 	}
 	stepunits[friendly.description+queen.description][0] = q
@@ -497,7 +503,7 @@ func stepCreeps() {
 				damage = 80
 				var descriptors []OwnerTypeDescriptors
 				descriptors = append(descriptors, OwnerTypeDescriptors{targetTeam, tower})
-				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0)
+				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0, false)
 				if err != nil {
 					u.Location = moveToward(u, stepsites[targetSite.Id].Location, u.Location.radius)
 					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
@@ -587,10 +593,30 @@ func simulationScore() int {
 
 	// If win
 	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
-		score = score + 1000000
+		score += 1000000
+	} else if simulationEnemyQueen.Health > 0 && simulationMyQueen.Health <= 0 {
+		score -= 1000000
 	}
 	score = score + simulationMyQueen.Health*100
 	score = score + simulationEnemyQueen.Health*-100
+
+	if simulationBuild.Id >= 0 {
+		// Check from current queen location, not simulated
+		//		score = score - distance(myQueen.Location, simulationBuild.Location)
+		if simulationBuild.Type == goldmine.index && sites[simulationBuild.Id].Gold == 0 {
+			score -= 100
+		}
+		if sites[simulationBuild.Id].Owner == friendly.index {
+			if sites[simulationBuild.Id].Type == barracks.index {
+				score -= 100
+			} else if sites[simulationBuild.Id].Type != simulationBuild.Type {
+				score -= 100
+			}
+		}
+		if sites[simulationBuild.Id].Owner == noOwner.index {
+			score += 100
+		}
+	}
 
 	myMines := 0
 	myTowers := 0
@@ -628,20 +654,21 @@ func simulationScore() int {
 	}
 
 	if myMines == 0 {
-		score -= 1000
+		score -= 100000
 	}
 	if myKnightBarracks == 0 {
-		score -= 999
+		score -= 9990
 	}
 	if myTowers == 0 {
-		score -= 898
+		score -= 8980
 	}
 	if myArcherBarracks == 0 {
-		score -= 497
+		score -= 4970
 	}
 	if myGiantBarracks == 0 {
-		score -= 496
+		score -= 4960
 	}
+
 	return score
 }
 
@@ -653,7 +680,7 @@ var bestTrain []int
 func simulateIterate() {
 	initializeSimulation()
 	// Don't simulate 50 or more because tower hp=200-4*iteration
-	for i := 0; i < 40; i++ {
+	for i := 0; i < SimulateTurns; i++ {
 		//		fmt.Fprint(os.Stderr, "i", i)
 		stepQueen()
 		stepCreeps()
@@ -669,7 +696,7 @@ func simulateIterate() {
 		bestBuild = simulationBuild
 		bestMove = simulationMove
 		bestTrain = simulationTrain
-		//		fmt.Fprintln(os.Stderr, "HI", maxScore, bestBuild, bestTrain)
+		//fmt.Fprintln(os.Stderr, "HI", maxScore, bestBuild, bestMove, bestTrain)
 	}
 }
 
@@ -692,7 +719,7 @@ func simulate() {
 	} else {
 		var descriptors []OwnerTypeDescriptors
 		descriptors = append(descriptors, OwnerTypeDescriptors{friendly, goldmine})
-		consider, err := getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0)
+		consider, err := getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0, true)
 		if err == nil {
 			considerSites = append(considerSites, consider)
 		}
@@ -701,14 +728,14 @@ func simulate() {
 		descriptors = append(descriptors, OwnerTypeDescriptors{enemy, goldmine})
 		descriptors = append(descriptors, OwnerTypeDescriptors{noOwner, noStructure})
 		for i := 0; i < 3; i++ {
-			consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, i)
+			consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, i, false)
 			if err == nil {
 				considerSites = append(considerSites, consider)
 			}
 		}
 		descriptors = descriptors[:0]
 		descriptors = append(descriptors, OwnerTypeDescriptors{friendly, tower})
-		consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0)
+		consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0, false)
 		if err == nil {
 			considerSites = append(considerSites, consider)
 		}
@@ -755,6 +782,34 @@ func simulate() {
 			simulateIterate()
 		}
 	}
+
+	simulationBuild = bestBuild
+	simulationMove.x = myQueen.Location.x
+	simulationMove.y = 0
+	simulateIterate()
+	simulationMove.x = myQueen.Location.x
+	simulationMove.y = 1000
+	simulateIterate()
+	simulationMove.x = 0
+	simulationMove.y = myQueen.Location.y
+	simulateIterate()
+	simulationMove.x = 1920
+	simulationMove.y = myQueen.Location.y
+	simulateIterate()
+
+	simulationBuild.Id = -1
+	simulationMove.x = myQueen.Location.x
+	simulationMove.y = 0
+	simulateIterate()
+	simulationMove.x = myQueen.Location.x
+	simulationMove.y = 1000
+	simulateIterate()
+	simulationMove.x = 0
+	simulationMove.y = myQueen.Location.y
+	simulateIterate()
+	simulationMove.x = 1920
+	simulationMove.y = myQueen.Location.y
+	simulateIterate()
 
 	simulationBuild = bestBuild
 	simulationMove = bestMove
@@ -841,14 +896,14 @@ func main() {
 		myQueen = units[friendly.description+queen.description][0]
 
 		simulate()
-		if simulationMove.x >= 0 {
-			fmt.Println("MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y))
-		} else if simulationBuild.Id >= 0 {
+		if simulationBuild.Id >= 0 {
 			buildString := siteType[simulationBuild.Type]
 			if simulationBuild.Type == barracks.index {
 				buildString += "-" + unitType[simulationBuild.Param2]
 			}
 			fmt.Println("BUILD " + strconv.Itoa(simulationBuild.Id) + " " + buildString)
+		} else if simulationMove.x >= 0 {
+			fmt.Println("MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y))
 		} else {
 			fmt.Println("WAIT")
 		}
