@@ -143,126 +143,6 @@ func initializeStrings() {
 	siteType[barracks.index] = barracks.description
 }
 
-func getTraining() string {
-	trainString := ""
-	longestBuildTime := 0
-	sitesToConsider := make([]Site, 0, len(sites))
-	enemyTowers := 0
-	for _, v := range sites {
-		if v.Owner == enemy.index && v.Type == tower.index {
-			enemyTowers++
-		}
-	}
-	enemyKnights := len(units[enemy.description+knight.description])
-
-	for _, v := range sites {
-		// If my barracks and ready to build
-		if v.Owner == friendly.index && v.Type == barracks.index && v.Param1 == 0 {
-			if v.Param2 == giant.index && enemyTowers <= 3 {
-				continue
-			}
-			if v.Param2 == archer.index && enemyKnights == 0 {
-				continue
-			}
-			if v.BuildTime > longestBuildTime {
-				longestBuildTime = v.BuildTime
-				sitesToConsider = append(sitesToConsider, v)
-			}
-		}
-	}
-	for _, v := range sitesToConsider {
-		// If can afford
-		if v.BuildTime == longestBuildTime && v.Cost <= gold {
-			trainString += " " + strconv.Itoa(v.Id)
-			gold -= v.Cost
-		}
-	}
-
-	return trainString
-}
-
-func getSiteToBuild() Site {
-	closestMine, err := closestSiteOwnerType(myQueen, friendly, goldmine)
-	if err == nil && closestMine.MaxMineSize > closestMine.Param1 {
-		return closestMine
-	}
-	/*	closestTower, err := closestSiteOwnerType(myQueen, friendly, tower)
-		if err == nil && closestTower.MaxMineSize > closestTower.Param1 {
-			return closestTower
-		}
-	*/
-
-	myMines := 0
-	myTowers := 0
-	myKnightBarracks := 0
-	myArcherBarracks := 0
-	myGiantBarracks := 0
-	enemyKnightBarracks := 0
-	enemyTowers := 0
-	for _, s := range sites {
-		if s.Owner == friendly.index {
-			switch buildingType := s.Type; buildingType {
-			case goldmine.index:
-				myMines++
-			case tower.index:
-				myTowers++
-			case barracks.index:
-				switch creep := s.Param2; creep {
-				case knight.index:
-					myKnightBarracks++
-				case archer.index:
-					myArcherBarracks++
-				case giant.index:
-					myGiantBarracks++
-				}
-			}
-		} else if s.Owner == enemy.index {
-			switch buildingType := s.Type; buildingType {
-			case tower.index:
-				enemyTowers++
-			case barracks.index:
-				if s.Param2 == knight.index {
-					enemyKnightBarracks++
-				}
-			}
-		}
-	}
-
-	site := closestNonfriendlyNontowerSite(myQueen)
-	if myMines == 0 {
-		site.Type = goldmine.index
-		return site
-	} else if myKnightBarracks == 0 {
-		site.Type = barracks.index
-		site.Param2 = knight.index
-		return site
-	} else if myTowers == 0 {
-		site.Type = tower.index
-		return site
-	} else if enemyKnightBarracks > 3 && myArcherBarracks == 0 {
-		site.Type = barracks.index
-		site.Param2 = archer.index
-		return site
-	} else if enemyTowers > 3 && myGiantBarracks == 0 {
-		site.Type = barracks.index
-		site.Param2 = giant.index
-		return site
-	} else if myMines <= myTowers {
-		site.Type = goldmine.index
-		return site
-	} else if myTowers <= myKnightBarracks {
-		site.Type = tower.index
-		return site
-	} else if myKnightBarracks <= 3 {
-		site.Type = barracks.index
-		site.Param2 = knight.index
-		return site
-	} else {
-		site.Type = goldmine.index
-		return site
-	}
-}
-
 func initialize() {
 	initializeDescriptors()
 	initializeMaps()
@@ -283,135 +163,59 @@ func sameLocation(start, end Coordinate) bool {
 	return start.x == end.x && start.y == end.y
 }
 
-func closestNonfriendlyNontowerSite(toUnit Unit) Site {
-	unitLocation := toUnit.Location
-	leastDistance := 100000
-	var site Site
-	for _, v := range sites {
-		if v.Owner != friendly.index && v.Type != tower.index {
-			thisDistance := distance(unitLocation, v.Location)
-			if thisDistance < leastDistance {
-				leastDistance = thisDistance
-				site = v
-			}
-		}
-	}
-
-	return site
+type distanceSite struct {
+	Distance int
+	St       Site
 }
 
-func closestNonfriendlyNontowerSiteIndex(toUnit Unit, index int) Site {
-	unitLocation := toUnit.Location
+type OwnerTypeDescriptors struct {
+	Owner Descriptor
+	Type  Descriptor
+}
 
-	type distanceSite struct {
-		Distance int
-		St       Site
+var distanceSites []distanceSite
+var distanceSiteFrom Coordinate
+
+func sortSitesByDistance(toUnit Unit) {
+	// if distances already determined and storted
+	if toUnit.Location.x == distanceSiteFrom.x && toUnit.Location.y == distanceSiteFrom.y {
+		return
 	}
 
-	var distanceSites []distanceSite
+	distanceSiteFrom = toUnit.Location
 	for _, v := range sites {
-		if v.Owner != friendly.index && v.Type != tower.index {
-			var thisDistanceSite distanceSite
-			thisDistanceSite.Distance = distance(unitLocation, v.Location)
-			thisDistanceSite.St = v
-			distanceSites = append(distanceSites, thisDistanceSite)
-		}
+		var thisDistanceSite distanceSite
+		thisDistanceSite.Distance = distance(distanceSiteFrom, v.Location)
+		thisDistanceSite.St = v
+		distanceSites = append(distanceSites, thisDistanceSite)
 	}
 
 	sort.Slice(distanceSites, func(i, j int) bool {
 		return distanceSites[i].Distance < distanceSites[j].Distance
 	})
+}
 
-	if index >= len(distanceSites) {
-		return distanceSites[len(distanceSites)-1].St
+func getSiteByDistanceDescriptorIndex(toUnit Unit, descriptors []OwnerTypeDescriptors, index int) (Site, error) {
+	sortSitesByDistance(toUnit)
+	foundIndex := -1
+	for _, s := range sites {
+		match := false
+		for _, d := range descriptors {
+			if s.Owner == d.Owner.index && s.Type == d.Type.index {
+				match = true
+				break
+			}
+		}
+		if match {
+			foundIndex++
+			if foundIndex == index {
+				return s, nil
+			}
+		}
 	}
-	return distanceSites[index].St
-}
 
-func closestFriendlyTower(toUnit Unit) (Site, error) {
-	return closestSiteOwnerType(toUnit, friendly, tower)
-}
-
-func closestSiteOwnerType(toUnit Unit, owner Descriptor, structureType Descriptor) (Site, error) {
-	unitLocation := toUnit.Location
-	leastDistance := 100000
-	siteFound := false
 	var site Site
-	for _, v := range sites {
-		if v.Owner == owner.index && v.Type == structureType.index {
-			thisDistance := distance(unitLocation, v.Location)
-			if thisDistance < leastDistance {
-				leastDistance = thisDistance
-				site = v
-				siteFound = true
-			}
-		}
-	}
-
-	if !siteFound {
-		return site, fmt.Errorf("No %v %v site found", owner.description, structureType.description)
-	}
-	return site, nil
-}
-
-func closestSiteOwner(toUnit Unit, owner Descriptor) (Site, error) {
-	unitLocation := toUnit.Location
-	leastDistance := 100000
-	siteFound := false
-	var site Site
-	for _, v := range sites {
-		if v.Owner == owner.index {
-			thisDistance := distance(unitLocation, v.Location)
-			if thisDistance < leastDistance {
-				leastDistance = thisDistance
-				site = v
-				siteFound = true
-			}
-		}
-	}
-
-	if !siteFound {
-		return site, fmt.Errorf("No %v site found", owner.description)
-	}
-	return site, nil
-}
-
-// The closest site to the given unit
-func closestSite(toUnit Unit) Site {
-	unitLocation := toUnit.Location
-	leastDistance := 100000
-	var site Site
-	for _, v := range sites {
-		if !sameLocation(unitLocation, v.Location) {
-			thisDistance := distance(unitLocation, v.Location)
-			if thisDistance < leastDistance {
-				leastDistance = thisDistance
-				site = v
-			}
-		}
-	}
-
-	return site
-}
-
-// The closest unit to the given unit
-func closestUnit(toUnit Unit) Unit {
-	unitLocation := toUnit.Location
-	leastDistance := 100000
-	var unit Unit
-	for _, v := range units {
-		for _, u := range v {
-			if !sameLocation(unitLocation, u.Location) {
-				thisDistance := distance(unitLocation, u.Location)
-				if thisDistance < leastDistance {
-					leastDistance = thisDistance
-					unit = u
-				}
-			}
-		}
-	}
-
-	return unit
+	return site, fmt.Errorf("getSiteByDistanceDescriptorIndex found no matching sites")
 }
 
 // stepTowerTarget searches stepunits returns the found unit, unit index, distance, and error
@@ -691,7 +495,9 @@ func stepCreeps() {
 				stepunits[unitGroupIdentifier(u)][i] = u
 			} else if u.Type == giant.index {
 				damage = 80
-				targetSite, err := closestSiteOwnerType(u, targetTeam, tower)
+				var descriptors []OwnerTypeDescriptors
+				descriptors = append(descriptors, OwnerTypeDescriptors{targetTeam, tower})
+				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0)
 				if err != nil {
 					u.Location = moveToward(u, stepsites[targetSite.Id].Location, u.Location.radius)
 					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
@@ -884,14 +690,25 @@ func simulate() {
 	if touchedSite >= 0 && stepsites[touchedSite].Owner == noOwner.index {
 		considerSites = append(considerSites, stepsites[touchedSite])
 	} else {
-		consider, err := closestSiteOwnerType(myQueen, friendly, goldmine)
+		var descriptors []OwnerTypeDescriptors
+		descriptors = append(descriptors, OwnerTypeDescriptors{friendly, goldmine})
+		consider, err := getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0)
 		if err == nil {
 			considerSites = append(considerSites, consider)
 		}
+		descriptors = descriptors[:0]
+		descriptors = append(descriptors, OwnerTypeDescriptors{enemy, barracks})
+		descriptors = append(descriptors, OwnerTypeDescriptors{enemy, goldmine})
+		descriptors = append(descriptors, OwnerTypeDescriptors{noOwner, noStructure})
 		for i := 0; i < 3; i++ {
-			considerSites = append(considerSites, closestNonfriendlyNontowerSiteIndex(myQueen, i))
+			consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, i)
+			if err == nil {
+				considerSites = append(considerSites, consider)
+			}
 		}
-		consider, err = closestFriendlyTower(myQueen)
+		descriptors = descriptors[:0]
+		descriptors = append(descriptors, OwnerTypeDescriptors{friendly, tower})
+		consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0)
 		if err == nil {
 			considerSites = append(considerSites, consider)
 		}
@@ -1022,44 +839,7 @@ func main() {
 			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
 		}
 		myQueen = units[friendly.description+queen.description][0]
-		/*
 
-			threat := closestUnit(myQueen)
-			queenAction := ""
-			retreat := false
-			if threat.Owner != friendly.index && distance(myQueen.Location, threat.Location) < 60 {
-				fmt.Fprintln(os.Stderr, "Retreat")
-				var retreatTo Site
-				var err error
-				retreatTo, err = closestSiteOwnerType(myQueen, friendly, tower)
-				if err == nil {
-					retreat = true
-					queenAction = "BUILD " + strconv.Itoa(retreatTo.Id) + " " + tower.description
-				} else {
-					fmt.Fprintln(os.Stderr, "Didn't retreat A because %v", err)
-					retreatTo, err = closestSiteOwner(myQueen, friendly)
-					if err == nil {
-						retreat = true
-						queenAction = "MOVE " + strconv.Itoa(retreatTo.Location.x) + " " + strconv.Itoa(retreatTo.Location.y)
-					}
-				}
-			}
-			if !retreat {
-				fmt.Fprintln(os.Stderr, "Advance")
-
-				buildSite := getSiteToBuild()
-				buildString := siteType[buildSite.Type]
-				if buildSite.Type == barracks.index {
-					buildString += "-" + unitType[buildSite.Param2]
-				}
-				queenAction = "BUILD " + strconv.Itoa(buildSite.Id) + " " + buildString
-			}
-
-			// First line: A valid queen action
-			// Second line: A set of training instructions
-			fmt.Println(queenAction)
-			fmt.Println("TRAIN" + getTraining())
-		*/
 		simulate()
 		if simulationMove.x >= 0 {
 			fmt.Println("MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y))
