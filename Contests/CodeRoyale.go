@@ -10,9 +10,12 @@ import (
 
 //import "os"
 
+const worldMaxX int = 1920
+const worldMaxY int = 1000
 const simulateTurns int = 30
 const queenRadius int = 30
 const queenSpeed int = 60
+const queenMass int = 10000
 const knightRadius int = 20
 const knightSpeed int = 100
 const knightMass int = 400
@@ -225,6 +228,14 @@ func distanceSpecifyRadius(start Coordinate, startRadius int, end Coordinate, en
 	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - startRadius - endRadius
 }
 
+func distanceSpecifyRadiusFloat(start Coordinate, startRadius float64, end Coordinate, endRadius float64) float64 {
+	return math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2)) - startRadius - endRadius
+}
+
+func overlap(start Coordinate, end Coordinate) float64 {
+	return float64(start.radius) + float64(end.radius) - math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))
+}
+
 func sameLocation(start, end Coordinate) bool {
 	return start.x == end.x && start.y == end.y
 }
@@ -371,7 +382,7 @@ var simulationTrain int
 var simulationBuilt bool
 var simulationTrained bool
 
-func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate {
+func moveToward(mover Unit, moverIndex int, destination Coordinate, moverRadius int) Coordinate {
 	if distanceSpecifyRadius(mover.Location, moverRadius, destination, destination.radius) <= 0 {
 		return mover.Location
 	}
@@ -384,13 +395,15 @@ func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate 
 	mover.Location.x -= int(float64(mover.Speed) * math.Cos(angle))
 	mover.Location.y -= int(float64(mover.Speed) * math.Sin(angle))
 
+	//fixCollisions()
+	collision(unitGroupIdentifier(mover), moverIndex)
 	return mover.Location
 }
 
 func stepQueen() {
 	q := stepunits[friendly.description+queen.description][0]
 	if !simulationBuilt && simulationBuild.Id >= 0 {
-		q.Location = moveToward(q, simulationBuild.Location, q.Location.radius)
+		q.Location = moveToward(q, 0, simulationBuild.Location, q.Location.radius)
 		if distance(q.Location, simulationBuild.Location) <= 0 {
 			thisSite := stepsites[simulationBuild.Id]
 			if !(thisSite.Owner == enemy.index && thisSite.Type == tower.index) {
@@ -449,7 +462,7 @@ func stepQueen() {
 
 	// If build and move, wait until built before moving
 	if simulationMove.x >= 0 {
-		q.Location = moveToward(q, simulationMove, 0)
+		q.Location = moveToward(q, 0, simulationMove, 0)
 	}
 	stepunits[friendly.description+queen.description][0] = q
 
@@ -546,7 +559,7 @@ func stepCreeps() {
 			}
 
 			if u.Type == knight.index {
-				u.Location = moveToward(u, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
+				u.Location = moveToward(u, i, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
 				if distance(u.Location, stepunits[targetTeam.description+targetType][0].Location) <= 0 {
 					stepunits[targetTeam.description+targetType][0].Health = stepunits[targetTeam.description+targetType][0].Health - damage
 				}
@@ -559,7 +572,7 @@ func stepCreeps() {
 					damage = 10
 				}
 
-				u.Location = moveToward(u, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
+				u.Location = moveToward(u, i, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
 				if distanceSpecifyRadius(u.Location, u.Range, targetUnit.Location, targetUnit.Location.radius) <= 0 {
 					stepunits[targetTeam.description+targetType][targetUnitIndex].Health = stepunits[targetTeam.description+targetType][targetUnitIndex].Health - damage
 				}
@@ -570,7 +583,7 @@ func stepCreeps() {
 				descriptors = append(descriptors, OwnerTypeDescriptors{targetTeam, tower})
 				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0, false)
 				if err != nil {
-					u.Location = moveToward(u, stepsites[targetSite.Id].Location, u.Location.radius)
+					u.Location = moveToward(u, i, stepsites[targetSite.Id].Location, u.Location.radius)
 					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
 						targetSite.Param1 = towerHP(targetSite) - damage
 						stepsites[targetSite.Id] = targetSite
@@ -650,6 +663,108 @@ func initializeSimulation() {
 	stepgold = gold
 	simulationBuilt = false
 	simulationTrained = false
+}
+
+func fixCollisions() {
+	for i := 0; i < 10; i++ {
+		if !collisionCheck() {
+			return
+		}
+	}
+}
+
+func collisionCheck() bool {
+	for t, u := range stepunits {
+		for i := range u {
+			if collision(t, i) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func collision(unitName string, index int) bool {
+	u1 := stepunits[unitName][index]
+	if u1.Location.x < 0 {
+		u1.Location.x = 0
+		stepunits[unitName][index] = u1
+		//				fmt.Fprintln(os.Stderr, "bonk A", u1.Location)
+		return true
+	}
+	if u1.Location.x > worldMaxX {
+		u1.Location.x = worldMaxX
+		stepunits[unitName][index] = u1
+		//				fmt.Fprintln(os.Stderr, "bonk B", u1.Location)
+		return true
+	}
+	if u1.Location.y < 0 {
+		u1.Location.y = 0
+		stepunits[unitName][index] = u1
+		//				fmt.Fprintln(os.Stderr, "bonk C", u1.Location)
+		return true
+	}
+	if u1.Location.y > worldMaxY {
+		u1.Location.y = worldMaxY
+		stepunits[unitName][index] = u1
+		//				fmt.Fprintln(os.Stderr, "bonk D", u1.Location)
+		return true
+	}
+
+	for t2, v := range stepunits {
+		for j, u2 := range v {
+			if unitName == t2 && index == j {
+				// Skip if colliding with self
+				continue
+			}
+			overlapCheck := overlap(u1.Location, u2.Location)
+			if overlapCheck > 0.000001 {
+				d1 := float64(u2.Mass / (u2.Mass + u1.Mass))
+				d2 := float64(u1.Mass / (u2.Mass + u1.Mass))
+				gap := 1.0
+				len := distanceSpecifyRadiusFloat(u1.Location, 0, u2.Location, 0)
+				normalizedX := 1.0
+				normalizedY := 0.0
+				if len >= 0.000001 {
+					normalizedX = float64(u2.Location.x-u1.Location.x) / len
+					normalizedY = float64(u2.Location.y-u1.Location.y) / len
+				}
+				u1.Location.x -= int(normalizedX * (d1*overlapCheck + gap))
+				u1.Location.y -= int(normalizedY * (d1*overlapCheck + gap))
+				u2.Location.x += int(normalizedX * (d2*overlapCheck + gap))
+				u2.Location.y += int(normalizedY * (d2*overlapCheck + gap))
+				stepunits[unitName][index] = u1
+				stepunits[t2][j] = u2
+				//						fmt.Fprintln(os.Stderr, "bonk E", u1.Location, u2.Location)
+				return true
+			}
+		}
+	}
+
+	for _, s := range stepsites {
+		overlapCheck := overlap(u1.Location, s.Location)
+		if overlapCheck <= 0.000001 {
+			return false
+		} else {
+			d1 := 1.0
+			gap := 1.0
+			len := distanceSpecifyRadiusFloat(u1.Location, 0, s.Location, 0)
+			normalizedX := 1.0
+			normalizedY := 0.0
+			if len >= 0.000001 {
+				normalizedX = float64(s.Location.x-u1.Location.x) / len
+				normalizedY = float64(s.Location.y-u1.Location.y) / len
+			}
+			u1.Location.x -= int(normalizedX * (d1*overlapCheck + gap))
+			u1.Location.y -= int(normalizedY * (d1*overlapCheck + gap))
+			stepunits[unitName][index] = u1
+			//					fmt.Fprintln(os.Stderr, "bonk F", u1.Location, s.Location)
+			return true
+		}
+	}
+
+	return false
 }
 
 func simulationScore() int {
@@ -926,12 +1041,12 @@ func simulate() {
 	simulationMove.y = 0
 	simulateIterate()
 	simulationMove.x = myQueen.Location.x
-	simulationMove.y = 1000
+	simulationMove.y = worldMaxY
 	simulateIterate()
 	simulationMove.x = 0
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
-	simulationMove.x = 1920
+	simulationMove.x = worldMaxX
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
 
@@ -941,12 +1056,12 @@ func simulate() {
 	simulationMove.y = 0
 	simulateIterate()
 	simulationMove.x = myQueen.Location.x
-	simulationMove.y = 1000
+	simulationMove.y = worldMaxY
 	simulateIterate()
 	simulationMove.x = 0
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
-	simulationMove.x = 1920
+	simulationMove.x = worldMaxX
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
 
@@ -1019,6 +1134,7 @@ func main() {
 			if unit.Type == queen.index {
 				unit.Location.radius = queenRadius
 				unit.Speed = queenSpeed
+				unit.Mass = queenMass
 			} else if unit.Type == knight.index {
 				unit.Location.radius = knightRadius
 				unit.Speed = knightSpeed
