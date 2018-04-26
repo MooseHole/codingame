@@ -369,6 +369,7 @@ var simulationBuild Site
 var simulationMove Coordinate
 var simulationTrain int
 var simulationBuilt bool
+var simulationTrained bool
 
 func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate {
 	if distanceSpecifyRadius(mover.Location, moverRadius, destination, destination.radius) <= 0 {
@@ -452,7 +453,7 @@ func stepQueen() {
 	}
 	stepunits[friendly.description+queen.description][0] = q
 
-	if simulationTrain >= 0 {
+	if !simulationTrained && simulationTrain >= 0 {
 		trainSite := stepsites[simulationTrain]
 		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && barracksTurnsRemaining(trainSite) == 0 {
 			if stepgold >= trainSite.Cost {
@@ -648,6 +649,7 @@ func initializeSimulation() {
 	}
 	stepgold = gold
 	simulationBuilt = false
+	simulationTrained = false
 }
 
 func simulationScore() int {
@@ -657,6 +659,13 @@ func simulationScore() int {
 	scordy := "&"
 
 	// If win
+	if len(stepunits[friendly.description+queen.description]) > 0 && len(stepunits[enemy.description+queen.description]) == 0 {
+		score += 1000000
+		scordy += "A!"
+	} else if len(stepunits[enemy.description+queen.description]) > 0 && len(stepunits[friendly.description+queen.description]) == 0 {
+		score -= 1000000
+		scordy += "B!"
+	}
 	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
 		score += 1000000
 		scordy += "A"
@@ -740,15 +749,19 @@ func simulationScore() int {
 	if simulationTrain >= 0 {
 		if netTowerHealth < towerInitialHP && barracksUnitType(stepsites[simulationTrain]) != giant.index {
 			score -= 1000
+			scordy += "a"
 		}
 		if myKnights+knightProduction < enemyKnights && barracksUnitType(stepsites[simulationTrain]) != archer.index {
 			score -= 1000
+			scordy += "b"
 		}
 		if simulationMyQueen.Health < simulationEnemyQueen.Health && barracksUnitType(stepsites[simulationTrain]) != knight.index {
 			score -= 10
+			scordy += "c"
 		}
-		if gold < giantCost && barracksUnitType(stepsites[simulationTrain]) != giant.index {
-			score -= 1000
+		if gold < giantCost {
+			score -= 10000
+			scordy += "d"
 		}
 	}
 
@@ -764,6 +777,7 @@ func simulationScore() int {
 		scordy += "J"
 	} else if myKnightBarracks > 3 {
 		score -= 1000
+		scordy += "j"
 	}
 	if myTowers == 0 {
 		score -= 500
@@ -774,20 +788,21 @@ func simulationScore() int {
 		scordy += "L"
 	} else if myArcherBarracks > 1 {
 		score -= 10000
+		scordy += "l"
 	}
 	if myGiantBarracks == 0 {
 		score -= 100
 		scordy += "M"
 	} else if myGiantBarracks > 1 {
 		score -= 10000
+		scordy += "m"
 	}
 
-	/*
-		if maxScore < score {
-			scordy = "^^" + scordy
-		}
-		fmt.Fprintln(os.Stderr, "score", score, scordy, siteString(simulationBuild), simulationMove, simulationTrain)
-	*/
+	if maxScore < score {
+		scordy = "^^" + scordy
+	}
+	//	fmt.Fprintln(os.Stderr, "score", score, scordy, siteString(simulationBuild), simulationMove, simulationTrain)
+
 	return score
 }
 
@@ -800,12 +815,16 @@ func simulateIterate() {
 	initializeSimulation()
 	// Don't simulate 50 or more because tower hp=200-4*iteration
 	for i := 0; i < simulateTurns; i++ {
-		//		fmt.Fprint(os.Stderr, "i", i)
 		stepQueen()
 		stepCreeps()
 		stepSites()
 		stepRemoveDead()
-		if stepunits[friendly.description+queen.description][0].Health > 0 && stepunits[enemy.description+queen.description][0].Health <= 0 {
+		/*		if stepunits[friendly.description+queen.description][0].Health > 0 && stepunits[enemy.description+queen.description][0].Health <= 0 {
+					break
+				} else if stepunits[friendly.description+queen.description][0].Health <= 0 && stepunits[enemy.description+queen.description][0].Health > 0 {
+					break
+				}*/
+		if len(stepunits[friendly.description+queen.description]) == 0 || len(stepunits[enemy.description+queen.description]) == 0 {
 			break
 		}
 	}
@@ -815,7 +834,6 @@ func simulateIterate() {
 		bestBuild = simulationBuild
 		bestMove = simulationMove
 		bestTrain = simulationTrain
-		//fmt.Fprintln(os.Stderr, "HI", maxScore, bestBuild, bestMove, bestTrain)
 	}
 }
 
@@ -939,7 +957,7 @@ func simulate() {
 	var trainingSites []int
 	for _, s := range stepsites {
 		// Do not only consider build time at 0.  It will be 0 during simulation and it may be good to wait.
-		if s.Owner == friendly.index && s.Type == barracks.index {
+		if s.Owner == friendly.index && s.Type == barracks.index && barracksTurnsRemaining(s) == 0 {
 			trainingSites = append(trainingSites, s.Id)
 		}
 	}
