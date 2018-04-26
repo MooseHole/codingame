@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"os"
 	"sort"
 	"strconv"
@@ -368,7 +367,7 @@ var stepsites map[int]Site
 var stepgold int
 var simulationBuild Site
 var simulationMove Coordinate
-var simulationTrain []int
+var simulationTrain int
 var simulationBuilt bool
 
 func moveToward(mover Unit, destination Coordinate, moverRadius int) Coordinate {
@@ -453,8 +452,8 @@ func stepQueen() {
 	}
 	stepunits[friendly.description+queen.description][0] = q
 
-	for t := range simulationTrain {
-		trainSite := stepsites[t]
+	if simulationTrain >= 0 {
+		trainSite := stepsites[simulationTrain]
 		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && barracksTurnsRemaining(trainSite) == 0 {
 			if stepgold >= trainSite.Cost {
 				stepgold = stepgold - trainSite.Cost
@@ -462,7 +461,7 @@ func stepQueen() {
 				//				fmt.Fprintln(os.Stderr, "train", siteString(trainSite))
 			}
 		}
-		stepsites[t] = trainSite
+		stepsites[simulationTrain] = trainSite
 	}
 }
 
@@ -705,12 +704,16 @@ func simulationScore() int {
 	myGiantBarracks := 0
 	enemyKnightBarracks := 0
 	enemyTowers := 0
+	netTowerHealth := 0
+	myKnights := len(stepunits[friendly.description+knight.description])
+	enemyKnights := len(stepunits[enemy.description+knight.description])
 	for _, s := range stepsites {
 		if s.Owner == friendly.index {
 			if s.Type == goldmine.index {
 				myMines++
 			} else if s.Type == tower.index {
 				myTowers++
+				netTowerHealth += towerHP(s)
 			} else if s.Type == barracks.index {
 				switch creep := barracksUnitType(s); creep {
 				case knight.index:
@@ -725,11 +728,27 @@ func simulationScore() int {
 			switch buildingType := s.Type; buildingType {
 			case tower.index:
 				enemyTowers++
+				netTowerHealth -= towerHP(s)
 			case barracks.index:
 				if barracksUnitType(s) == knight.index {
 					enemyKnightBarracks++
 				}
 			}
+		}
+	}
+
+	if simulationTrain >= 0 {
+		if netTowerHealth < towerInitialHP && barracksUnitType(stepsites[simulationTrain]) != giant.index {
+			score -= 1000
+		}
+		if myKnights+knightProduction < enemyKnights && barracksUnitType(stepsites[simulationTrain]) != archer.index {
+			score -= 1000
+		}
+		if simulationMyQueen.Health < simulationEnemyQueen.Health && barracksUnitType(stepsites[simulationTrain]) != knight.index {
+			score -= 10
+		}
+		if gold < giantCost && barracksUnitType(stepsites[simulationTrain]) != giant.index {
+			score -= 1000
 		}
 	}
 
@@ -743,6 +762,8 @@ func simulationScore() int {
 	} else if myKnightBarracks < 2 {
 		score -= 1000
 		scordy += "J"
+	} else if myKnightBarracks > 3 {
+		score -= 1000
 	}
 	if myTowers == 0 {
 		score -= 500
@@ -751,10 +772,14 @@ func simulationScore() int {
 	if myArcherBarracks == 0 {
 		score -= 100
 		scordy += "L"
+	} else if myArcherBarracks > 1 {
+		score -= 10000
 	}
 	if myGiantBarracks == 0 {
 		score -= 100
 		scordy += "M"
+	} else if myGiantBarracks > 1 {
+		score -= 10000
 	}
 
 	/*
@@ -769,7 +794,7 @@ func simulationScore() int {
 var maxScore int
 var bestBuild Site
 var bestMove Coordinate
-var bestTrain []int
+var bestTrain int
 
 func simulateIterate() {
 	initializeSimulation()
@@ -798,14 +823,14 @@ func simulate() {
 	maxScore = math.MinInt32
 	simulationBuild.Id = -1
 	simulationMove.x = -1
-	simulationTrain = nil
+	simulationTrain = -1
 
 	bestBuild = simulationBuild
 	bestMove = simulationMove
 	bestTrain = simulationTrain
 	initializeSimulation()
 	simulationMove.x = -1
-	simulationTrain = rand.Perm(len(stepsites))
+	simulationTrain = -1
 
 	considerSites := make([]Site, 0, len(stepsites))
 	if touchedSite >= 0 && stepsites[touchedSite].Owner == noOwner.index {
@@ -851,9 +876,8 @@ func simulate() {
 		}
 
 		if v.Owner != friendly.index {
-			if simulationTrain != nil {
-				simulationTrain[0] = v.Id
-			}
+			simulationTrain = v.Id
+
 			simulationBuild = v
 			simulationBuild.Type = barracks.index
 			simulationBuild.Param2 = knight.index
@@ -870,6 +894,7 @@ func simulate() {
 			simulateIterate()
 		}
 
+		simulationTrain = -1
 		if v.Owner != friendly.index || v.Type == goldmine.index {
 			simulationBuild = v
 			simulationBuild.Type = goldmine.index
@@ -921,8 +946,7 @@ func simulate() {
 
 	// Try building at each single barracks
 	for _, t := range trainingSites {
-		simulationTrain = simulationTrain[:0]
-		simulationTrain = append(simulationTrain, t)
+		simulationTrain = t
 		simulateIterate()
 	}
 
@@ -1009,11 +1033,11 @@ func main() {
 			fmt.Println("WAIT")
 		}
 		trainString := ""
-		for i := range simulationTrain {
-			if sites[i].Owner == friendly.index && sites[i].Type == barracks.index {
-				if sites[i].Cost <= gold {
-					trainString = trainString + " " + strconv.Itoa(i)
-					gold -= sites[i].Cost
+		if simulationTrain >= 0 {
+			if sites[simulationTrain].Owner == friendly.index && sites[simulationTrain].Type == barracks.index {
+				if sites[simulationTrain].Cost <= gold {
+					trainString = trainString + " " + strconv.Itoa(simulationTrain)
+					gold -= sites[simulationTrain].Cost
 				}
 			}
 		}
