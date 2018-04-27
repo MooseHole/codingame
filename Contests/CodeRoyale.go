@@ -12,6 +12,7 @@ import (
 
 const worldMaxX int = 1920
 const worldMaxY int = 1000
+const touchingDelta int = 5
 const simulateTurns int = 30
 const queenRadius int = 30
 const queenSpeed int = 60
@@ -166,6 +167,7 @@ func initializeMaps() {
 	siteType = make(map[int]string)
 	units = make(map[string][]Unit)
 	sites = make(map[int]Site)
+	distanceMap = make(map[string]float64)
 }
 
 type Descriptor struct {
@@ -221,19 +223,38 @@ func initialize() {
 }
 
 func distance(start, end Coordinate) int {
-	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - start.radius - end.radius
+	return distanceSpecifyRadius(start, start.radius, end, end.radius)
 }
 
 func distanceSpecifyRadius(start Coordinate, startRadius int, end Coordinate, endRadius int) int {
-	return int(math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))) - startRadius - endRadius
+	return int(distanceSpecifyRadiusFloat(start, float64(startRadius), end, float64(endRadius)))
 }
 
 func distanceSpecifyRadiusFloat(start Coordinate, startRadius float64, end Coordinate, endRadius float64) float64 {
-	return math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2)) - startRadius - endRadius
+	return distancePure(start.x, start.y, end.x, end.y) - startRadius - endRadius
 }
 
+var distanceMap map[string]float64
+
+func distancePure(startX int, startY int, endX int, endY int) float64 {
+	if startX == endX && startY == endY {
+		return 0.0
+	}
+	distanceString := strconv.Itoa(startX) + ":" + strconv.Itoa(startY) + "|" + strconv.Itoa(endX) + ":" + strconv.Itoa(endY)
+	dista, exists := distanceMap[distanceString]
+	if !exists || dista < 0.000001 {
+		dista = math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2))
+		distanceMap[distanceString] = dista
+		//		fmt.Fprintln(os.Stderr, "Dist set", distanceString, dista)
+	} else {
+		//fmt.Fprintln(os.Stderr, "Dist exists", distanceString, dist)
+	}
+	//	fmt.Fprintln(os.Stderr, "Dist found", distanceString, dist)
+	return dista
+	//return math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2))
+}
 func overlap(start Coordinate, end Coordinate) float64 {
-	return float64(start.radius) + float64(end.radius) - math.Sqrt(math.Pow(float64(start.x-end.x), 2)+math.Pow(float64(start.y-end.y), 2))
+	return float64(start.radius) + float64(end.radius) - distancePure(start.x, start.y, end.x, end.y)
 }
 
 func sameLocation(start, end Coordinate) bool {
@@ -401,7 +422,25 @@ func moveToward(mover Unit, moverIndex int, destination Coordinate, moverRadius 
 }
 
 func stepQueen() {
+	if !simulationTrained && simulationTrain >= 0 {
+		trainSite := stepsites[simulationTrain]
+		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && barracksTurnsRemaining(trainSite) == 0 {
+			if stepgold >= trainSite.Cost {
+				stepgold = stepgold - trainSite.Cost
+				trainSite.Param1 = trainSite.BuildTime
+				//				fmt.Fprintln(os.Stderr, "train", siteString(trainSite))
+			}
+		}
+		stepsites[simulationTrain] = trainSite
+		simulationTrained = true
+	}
+
 	q := stepunits[friendly.description+queen.description][0]
+	// If build and move, wait until built before moving
+	if simulationMove.x >= 0 && (simulationBuilt || simulationBuild.Id < 0) {
+		q.Location = moveToward(q, 0, simulationMove, 0)
+	}
+
 	if !simulationBuilt && simulationBuild.Id >= 0 {
 		q.Location = moveToward(q, 0, simulationBuild.Location, q.Location.radius)
 		if distance(q.Location, simulationBuild.Location) <= 0 {
@@ -460,23 +499,7 @@ func stepQueen() {
 		}
 	}
 
-	// If build and move, wait until built before moving
-	if simulationMove.x >= 0 {
-		q.Location = moveToward(q, 0, simulationMove, 0)
-	}
 	stepunits[friendly.description+queen.description][0] = q
-
-	if !simulationTrained && simulationTrain >= 0 {
-		trainSite := stepsites[simulationTrain]
-		if trainSite.Owner == friendly.index && trainSite.Type == barracks.index && barracksTurnsRemaining(trainSite) == 0 {
-			if stepgold >= trainSite.Cost {
-				stepgold = stepgold - trainSite.Cost
-				trainSite.Param1 = trainSite.BuildTime
-				//				fmt.Fprintln(os.Stderr, "train", siteString(trainSite))
-			}
-		}
-		stepsites[simulationTrain] = trainSite
-	}
 }
 
 func stepSites() {
@@ -486,6 +509,16 @@ func stepSites() {
 				dug := int(math.Min(float64(v.Gold), float64(goldmineIncome(v))))
 				stepgold = stepgold + dug
 				v.Gold = v.Gold - dug
+
+				if v.Gold <= 0 {
+					var site Site
+					site.Id = v.Id
+					site.Type = noStructure.index
+					site.Location.x = v.Location.x
+					site.Location.y = v.Location.y
+					site.Location.radius = v.Location.radius
+				}
+
 				stepsites[i] = v
 			}
 		} else if v.Type == barracks.index {
@@ -543,83 +576,99 @@ func stepSites() {
 	}
 }
 
-func stepCreeps() {
+func stepCreepMove() {
 	for _, v := range stepunits {
 		for i, u := range v {
-			// Aging
-			if u.Type != queen.index {
-				u.Health--
-			}
-
-			damage := 1
 			targetTeam := friendly
-			targetType := queen.description
 			if u.Owner == friendly.index {
 				targetTeam = enemy
 			}
 
 			if u.Type == knight.index {
-				u.Location = moveToward(u, i, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
-				if distance(u.Location, stepunits[targetTeam.description+targetType][0].Location) <= 0 {
-					stepunits[targetTeam.description+targetType][0].Health = stepunits[targetTeam.description+targetType][0].Health - damage
-				}
-				stepunits[unitGroupIdentifier(u)][i] = u
+				u.Location = moveToward(u, i, stepunits[targetTeam.description+queen.description][0].Location, u.Location.radius)
 			} else if u.Type == archer.index {
 				targetUnit, targetUnitIndex := closestOpposingUnit(u)
-				targetType := unitType[targetUnit.Type]
-				damage = 2
-				if targetUnit.Type == giant.index {
-					damage = 10
-				}
-
-				u.Location = moveToward(u, i, stepunits[targetTeam.description+targetType][0].Location, u.Location.radius)
 				if distanceSpecifyRadius(u.Location, u.Range, targetUnit.Location, targetUnit.Location.radius) <= 0 {
-					stepunits[targetTeam.description+targetType][targetUnitIndex].Health = stepunits[targetTeam.description+targetType][targetUnitIndex].Health - damage
+					u.Location = moveToward(u, i, stepunits[unitGroupIdentifier(targetUnit)][targetUnitIndex].Location, u.Range)
 				}
-				stepunits[unitGroupIdentifier(u)][i] = u
 			} else if u.Type == giant.index {
-				damage = 80
 				var descriptors []OwnerTypeDescriptors
 				descriptors = append(descriptors, OwnerTypeDescriptors{targetTeam, tower})
 				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0, false)
 				if err != nil {
 					u.Location = moveToward(u, i, stepsites[targetSite.Id].Location, u.Location.radius)
-					if distance(u.Location, stepsites[targetSite.Id].Location) <= 0 {
-						targetSite.Param1 = towerHP(targetSite) - damage
-						stepsites[targetSite.Id] = targetSite
-					}
-					stepunits[unitGroupIdentifier(u)][i] = u
 				}
 			}
 		}
 	}
 }
 
-func stepRemoveDead() {
-	for _, v := range stepunits {
-		deleted := 0
-		for i := range v {
-			j := i - deleted
-			if v[j].Health <= 0 {
-				v = v[:j+copy(v[j:], v[j+1:])]
-				deleted++
+func stepCreepAge() {
+	for k, v := range stepunits {
+		for i, u := range v {
+			// Aging
+			if u.Type != queen.index {
+				u.Health--
+				stepunits[k][i] = u
 			}
 		}
 	}
+}
 
+func stepCreepAttack() {
+	for _, v := range stepunits {
+		for _, u := range v {
+			damage := 1
+			targetTeam := friendly
+			if u.Owner == friendly.index {
+				targetTeam = enemy
+			}
+
+			if u.Type == knight.index {
+				if distance(u.Location, stepunits[targetTeam.description+queen.description][0].Location) < touchingDelta {
+					stepunits[targetTeam.description+queen.description][0].Health = stepunits[targetTeam.description+queen.description][0].Health - damage
+				}
+			} else if u.Type == archer.index {
+				targetUnit, targetUnitIndex := closestOpposingUnit(u)
+				damage = 2
+				if targetUnit.Type == giant.index {
+					damage = 10
+				}
+				if distanceSpecifyRadius(u.Location, u.Range, targetUnit.Location, targetUnit.Location.radius) <= 0 {
+					stepunits[unitGroupIdentifier(targetUnit)][targetUnitIndex].Health = stepunits[unitGroupIdentifier(targetUnit)][targetUnitIndex].Health - damage
+				}
+			} else if u.Type == giant.index {
+				damage = 80
+				var descriptors []OwnerTypeDescriptors
+				descriptors = append(descriptors, OwnerTypeDescriptors{targetTeam, tower})
+				targetSite, err := getSiteByDistanceDescriptorIndex(u, descriptors, 0, false)
+				if err != nil {
+					if distance(u.Location, stepsites[targetSite.Id].Location) < touchingDelta {
+						targetSite.Param1 = towerHP(targetSite) - damage
+						stepsites[targetSite.Id] = targetSite
+					}
+
+					if towerHP(targetSite) <= 0 {
+						var site Site
+						site.Id = targetSite.Id
+						site.Type = noStructure.index
+						site.Location.x = targetSite.Location.x
+						site.Location.y = targetSite.Location.y
+						site.Location.radius = targetSite.Location.radius
+						stepsites[targetSite.Id] = site
+					}
+				}
+			}
+		}
+	}
+}
+
+func stepUnitsCollapseBuildings() {
 	for k, v := range stepsites {
-		if v.Type == tower.index && towerHP(v) <= 0 {
-			var site Site
-			site.Id = v.Id
-			site.Type = noStructure.index
-			site.Location.x = v.Location.x
-			site.Location.y = v.Location.y
-			site.Location.radius = v.Location.radius
-			stepsites[k] = site
-		} else if v.Type == goldmine.index {
+		if v.Type == goldmine.index {
 			for _, uni := range stepunits {
 				for _, u := range uni {
-					if v.Owner != u.Owner && distance(v.Location, u.Location) <= 0 {
+					if v.Owner != u.Owner && distance(v.Location, u.Location) < touchingDelta {
 						var site Site
 						site.Id = v.Id
 						site.Type = noStructure.index
@@ -636,7 +685,7 @@ func stepRemoveDead() {
 				queenString = enemy.description
 			}
 			queenString = queenString + queen.description
-			if distance(v.Location, stepunits[queenString][0].Location) <= 0 {
+			if distance(v.Location, stepunits[queenString][0].Location) < touchingDelta {
 				var site Site
 				site.Id = v.Id
 				site.Type = noStructure.index
@@ -647,6 +696,29 @@ func stepRemoveDead() {
 			}
 		}
 	}
+}
+
+func stepRemoveDead() {
+	for _, v := range stepunits {
+		deleted := 0
+		for i := range v {
+			j := i - deleted
+			if v[j].Type != queen.index && v[j].Health <= 0 {
+				v = v[:j+copy(v[j:], v[j+1:])]
+				deleted++
+			}
+		}
+	}
+}
+
+func stepCheckGameEnd() int {
+	if stepunits[friendly.description+queen.description][0].Health > 0 && stepunits[enemy.description+queen.description][0].Health <= 0 {
+		return friendly.index
+	} else if stepunits[friendly.description+queen.description][0].Health <= 0 && stepunits[enemy.description+queen.description][0].Health > 0 {
+		return enemy.index
+	}
+
+	return noOwner.index
 }
 
 func initializeSimulation() {
@@ -767,29 +839,36 @@ func collision(unitName string, index int) bool {
 	return false
 }
 
+func coveredByTowers(unit Unit) int {
+	coveredBy := 0
+	for _, v := range stepsites {
+		if v.Type == tower.index {
+			if distanceSpecifyRadius(unit.Location, 0, v.Location, towerAttackRadius(v)) < 0 {
+				if v.Owner == unit.Owner {
+					coveredBy++
+				}
+			}
+		}
+	}
+	return coveredBy
+}
+
 func simulationScore() int {
 	score := 0
 	simulationMyQueen := stepunits[friendly.description+queen.description][0]
 	simulationEnemyQueen := stepunits[enemy.description+queen.description][0]
 	scordy := "&"
 
-	// If win
-	if len(stepunits[friendly.description+queen.description]) > 0 && len(stepunits[enemy.description+queen.description]) == 0 {
-		score += 1000000
-		scordy += "A!"
-	} else if len(stepunits[enemy.description+queen.description]) > 0 && len(stepunits[friendly.description+queen.description]) == 0 {
-		score -= 1000000
-		scordy += "B!"
-	}
-	if simulationMyQueen.Health > 0 && simulationEnemyQueen.Health <= 0 {
+	if stepCheckGameEnd() == friendly.index {
 		score += 1000000
 		scordy += "A"
-	} else if simulationEnemyQueen.Health > 0 && simulationMyQueen.Health <= 0 {
+	} else if stepCheckGameEnd() == enemy.index {
 		score -= 1000000
 		scordy += "B"
+	} else {
+		score = score + simulationMyQueen.Health*100
+		score = score + simulationEnemyQueen.Health*-100
 	}
-	score = score + simulationMyQueen.Health*100
-	score = score + simulationEnemyQueen.Health*-100
 
 	// Evaluate builds on existing buildings
 	if simulationBuild.Id >= 0 {
@@ -831,6 +910,13 @@ func simulationScore() int {
 	netTowerHealth := 0
 	myKnights := len(stepunits[friendly.description+knight.description])
 	enemyKnights := len(stepunits[enemy.description+knight.description])
+	myBuildingKnights := 0
+	for _, s := range sites {
+		if s.Owner == friendly.index && s.Type == barracks.index && barracksTurnsRemaining(s) > 0 {
+			myBuildingKnights++
+		}
+	}
+
 	for _, s := range stepsites {
 		if s.Owner == friendly.index {
 			if s.Type == goldmine.index {
@@ -862,27 +948,34 @@ func simulationScore() int {
 	}
 
 	if simulationTrain >= 0 {
-		if netTowerHealth < towerInitialHP && barracksUnitType(stepsites[simulationTrain]) != giant.index {
-			score -= 1000
+		if netTowerHealth < towerInitialHP && barracksUnitType(stepsites[simulationTrain]) == giant.index {
+			score += 10
 			scordy += "a"
 		}
-		if myKnights+knightProduction < enemyKnights && barracksUnitType(stepsites[simulationTrain]) != archer.index {
-			score -= 1000
+		if coveredByTowers(simulationEnemyQueen) >= 3 && barracksUnitType(stepsites[simulationTrain]) == giant.index {
+			score += 10
+			scordy += "aa"
+		}
+		if myKnights+knightProduction < enemyKnights && barracksUnitType(stepsites[simulationTrain]) == archer.index {
+			score += 10
 			scordy += "b"
 		}
-		if simulationMyQueen.Health < simulationEnemyQueen.Health && barracksUnitType(stepsites[simulationTrain]) != knight.index {
-			score -= 10
+		if simulationMyQueen.Health < simulationEnemyQueen.Health && barracksUnitType(stepsites[simulationTrain]) == knight.index {
+			score += 10
 			scordy += "c"
 		}
-		if gold < giantCost {
-			score -= 10000
+		if myBuildingKnights == 0 && gold < giantCost {
+			score -= 1000
 			scordy += "d"
 		}
+	} else {
+		//		score -= 1
+		//		scordy += "e"
 	}
 
 	if myMines < 3 {
 		score -= 100000 * (3 - myMines)
-		scordy += "H"
+		scordy += "H" + strconv.Itoa(myMines)
 	}
 	if myKnightBarracks == 0 {
 		score -= 9990
@@ -899,18 +992,22 @@ func simulationScore() int {
 		scordy += "K"
 	}
 	if myArcherBarracks == 0 {
-		score -= 100
+		score -= 10
 		scordy += "L"
 	} else if myArcherBarracks > 1 {
 		score -= 10000
 		scordy += "l"
 	}
 	if myGiantBarracks == 0 {
-		score -= 100
+		score -= 10
 		scordy += "M"
 	} else if myGiantBarracks > 1 {
 		score -= 10000
 		scordy += "m"
+	}
+	if simulationBuild.Type == goldmine.index && sites[simulationBuild.Id].Type == goldmine.index && goldmineIncome(sites[simulationBuild.Id]) < sites[simulationBuild.Id].MaxMineSize {
+		score += 1000
+		scordy += "N"
 	}
 
 	if maxScore < score {
@@ -931,15 +1028,13 @@ func simulateIterate() {
 	// Don't simulate 50 or more because tower hp=200-4*iteration
 	for i := 0; i < simulateTurns; i++ {
 		stepQueen()
-		stepCreeps()
+		stepCreepMove()
+		stepCreepAttack()
+		stepUnitsCollapseBuildings()
 		stepSites()
+		stepCreepAge()
 		stepRemoveDead()
-		/*		if stepunits[friendly.description+queen.description][0].Health > 0 && stepunits[enemy.description+queen.description][0].Health <= 0 {
-					break
-				} else if stepunits[friendly.description+queen.description][0].Health <= 0 && stepunits[enemy.description+queen.description][0].Health > 0 {
-					break
-				}*/
-		if len(stepunits[friendly.description+queen.description]) == 0 || len(stepunits[enemy.description+queen.description]) == 0 {
+		if stepCheckGameEnd() != noOwner.index {
 			break
 		}
 	}
@@ -969,11 +1064,17 @@ func simulate() {
 	if touchedSite >= 0 && stepsites[touchedSite].Owner == noOwner.index {
 		considerSites = append(considerSites, stepsites[touchedSite])
 	} else {
+		var consider Site
+		var err error
 		var descriptors []OwnerTypeDescriptors
 		descriptors = append(descriptors, OwnerTypeDescriptors{friendly, goldmine})
-		consider, err := getSiteByDistanceDescriptorIndex(myQueen, descriptors, 0, true)
-		if err == nil {
-			considerSites = append(considerSites, consider)
+		sortSitesByDistance(myQueen, true)
+		for i := 0; i < 3; i++ {
+			consider, err = getSiteByDistanceDescriptorIndex(myQueen, descriptors, i, false)
+			if err == nil && goldmineIncome(consider) < consider.MaxMineSize {
+				considerSites = append(considerSites, consider)
+				break
+			}
 		}
 		descriptors = descriptors[:0]
 		descriptors = append(descriptors, OwnerTypeDescriptors{enemy, barracks})
@@ -1009,8 +1110,6 @@ func simulate() {
 		}
 
 		if v.Owner != friendly.index {
-			simulationTrain = v.Id
-
 			simulationBuild = v
 			simulationBuild.Type = barracks.index
 			simulationBuild.Param2 = knight.index
@@ -1070,7 +1169,7 @@ func simulate() {
 	simulationMove = bestMove
 	simulateIterate()
 	var trainingSites []int
-	for _, s := range stepsites {
+	for _, s := range sites {
 		// Do not only consider build time at 0.  It will be 0 during simulation and it may be good to wait.
 		if s.Owner == friendly.index && s.Type == barracks.index && barracksTurnsRemaining(s) == 0 {
 			trainingSites = append(trainingSites, s.Id)
