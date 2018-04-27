@@ -167,7 +167,7 @@ func initializeMaps() {
 	siteType = make(map[int]string)
 	units = make(map[string][]Unit)
 	sites = make(map[int]Site)
-	distanceMap = make(map[string]float64)
+	distanceMap = make(map[string]int)
 }
 
 type Descriptor struct {
@@ -227,34 +227,34 @@ func distance(start, end Coordinate) int {
 }
 
 func distanceSpecifyRadius(start Coordinate, startRadius int, end Coordinate, endRadius int) int {
-	return int(distanceSpecifyRadiusFloat(start, float64(startRadius), end, float64(endRadius)))
-}
-
-func distanceSpecifyRadiusFloat(start Coordinate, startRadius float64, end Coordinate, endRadius float64) float64 {
+	//	return int(distanceSpecifyRadiusFloat(start, float64(startRadius), end, float64(endRadius)))
 	return distancePure(start.x, start.y, end.x, end.y) - startRadius - endRadius
 }
 
-var distanceMap map[string]float64
+func distanceNoRadiusFloat(start Coordinate, end Coordinate) float64 {
+	//	return distancePure(start.x, start.y, end.x, end.y)
+	return math.Sqrt(math.Pow(float64(start.x-end.x), 2) + math.Pow(float64(start.y-end.y), 2))
+}
 
-func distancePure(startX int, startY int, endX int, endY int) float64 {
+var distanceMap map[string]int
+
+func distancePure(startX int, startY int, endX int, endY int) int {
 	if startX == endX && startY == endY {
-		return 0.0
+		return 0
 	}
-	distanceString := strconv.Itoa(startX) + ":" + strconv.Itoa(startY) + "|" + strconv.Itoa(endX) + ":" + strconv.Itoa(endY)
-	dista, exists := distanceMap[distanceString]
-	if !exists || dista < 0.000001 {
-		dista = math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2))
-		distanceMap[distanceString] = dista
-		//		fmt.Fprintln(os.Stderr, "Dist set", distanceString, dista)
-	} else {
-		//fmt.Fprintln(os.Stderr, "Dist exists", distanceString, dist)
-	}
-	//	fmt.Fprintln(os.Stderr, "Dist found", distanceString, dist)
-	return dista
-	//return math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2))
+	return int(math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2)))
+	/*
+		distanceString := strconv.Itoa(startX) + ":" + strconv.Itoa(startY) + "|" + strconv.Itoa(endX) + ":" + strconv.Itoa(endY)
+		dista, exists := distanceMap[distanceString]
+		// Not in map, or memory overflow so dista is set at 0
+		if !exists || dista < 1 {
+			dista = int(math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2)))
+			distanceMap[distanceString] = dista
+		}
+		return dista*/
 }
 func overlap(start Coordinate, end Coordinate) float64 {
-	return float64(start.radius) + float64(end.radius) - distancePure(start.x, start.y, end.x, end.y)
+	return float64(start.radius) + float64(end.radius) - distanceNoRadiusFloat(start, end)
 }
 
 func sameLocation(start, end Coordinate) bool {
@@ -404,7 +404,7 @@ var simulationBuilt bool
 var simulationTrained bool
 
 func moveToward(mover Unit, moverIndex int, destination Coordinate, moverRadius int) Coordinate {
-	if distanceSpecifyRadius(mover.Location, moverRadius, destination, destination.radius) <= 0 {
+	if distanceSpecifyRadius(mover.Location, moverRadius, destination, destination.radius) < touchingDelta {
 		return mover.Location
 	}
 
@@ -417,7 +417,7 @@ func moveToward(mover Unit, moverIndex int, destination Coordinate, moverRadius 
 	mover.Location.y -= int(float64(mover.Speed) * math.Sin(angle))
 
 	//fixCollisions()
-	collision(unitGroupIdentifier(mover), moverIndex)
+	//	collision(unitGroupIdentifier(mover), moverIndex)
 	return mover.Location
 }
 
@@ -443,7 +443,7 @@ func stepQueen() {
 
 	if !simulationBuilt && simulationBuild.Id >= 0 {
 		q.Location = moveToward(q, 0, simulationBuild.Location, q.Location.radius)
-		if distance(q.Location, simulationBuild.Location) <= 0 {
+		if distance(q.Location, simulationBuild.Location) < touchingDelta {
 			thisSite := stepsites[simulationBuild.Id]
 			if !(thisSite.Owner == enemy.index && thisSite.Type == tower.index) {
 				thisSite.Owner = friendly.index
@@ -795,7 +795,7 @@ func collision(unitName string, index int) bool {
 				d1 := float64(u2.Mass / (u2.Mass + u1.Mass))
 				d2 := float64(u1.Mass / (u2.Mass + u1.Mass))
 				gap := 1.0
-				len := distanceSpecifyRadiusFloat(u1.Location, 0, u2.Location, 0)
+				len := distanceNoRadiusFloat(u1.Location, u2.Location)
 				normalizedX := 1.0
 				normalizedY := 0.0
 				if len >= 0.000001 {
@@ -821,7 +821,7 @@ func collision(unitName string, index int) bool {
 		} else {
 			d1 := 1.0
 			gap := 1.0
-			len := distanceSpecifyRadiusFloat(u1.Location, 0, s.Location, 0)
+			len := distanceNoRadiusFloat(u1.Location, s.Location)
 			normalizedX := 1.0
 			normalizedY := 0.0
 			if len >= 0.000001 {
@@ -975,7 +975,7 @@ func simulationScore() int {
 
 	if myMines < 3 {
 		score -= 100000 * (3 - myMines)
-		scordy += "H" + strconv.Itoa(myMines)
+		scordy += "H"
 	}
 	if myKnightBarracks == 0 {
 		score -= 9990
@@ -1134,21 +1134,6 @@ func simulate() {
 		}
 	}
 
-	// Try moving after doing the build
-	simulationBuild = bestBuild
-	simulationMove.x = myQueen.Location.x
-	simulationMove.y = 0
-	simulateIterate()
-	simulationMove.x = myQueen.Location.x
-	simulationMove.y = worldMaxY
-	simulateIterate()
-	simulationMove.x = 0
-	simulationMove.y = myQueen.Location.y
-	simulateIterate()
-	simulationMove.x = worldMaxX
-	simulationMove.y = myQueen.Location.y
-	simulateIterate()
-
 	// Try moving without building
 	simulationBuild.Id = -1
 	simulationMove.x = myQueen.Location.x
@@ -1164,10 +1149,12 @@ func simulate() {
 	simulationMove.y = myQueen.Location.y
 	simulateIterate()
 
-	// Set training sites to what they would be after doing best action
+	// Try moving after doing the build
 	simulationBuild = bestBuild
 	simulationMove = bestMove
 	simulateIterate()
+
+	// Set training sites to what they would be after doing best action
 	var trainingSites []int
 	for _, s := range sites {
 		// Do not only consider build time at 0.  It will be 0 during simulation and it may be good to wait.
