@@ -163,6 +163,7 @@ func siteString(site Site) string {
 
 func clearUnits() {
 	units = make(map[string][]Unit)
+	distanceMap = make(map[CoordinatePair]int)
 	distanceSites = make(map[Coordinate][]distanceSite)
 }
 
@@ -172,7 +173,7 @@ func initializeMaps() {
 	siteType = make(map[int]string)
 	units = make(map[string][]Unit)
 	sites = make(map[int]Site)
-	distanceMap = make(map[string]int)
+	distanceMap = make(map[CoordinatePair]int)
 	distanceSites = make(map[Coordinate][]distanceSite)
 }
 
@@ -235,7 +236,7 @@ func distance(start, end Coordinate) int {
 
 func distanceSpecifyRadius(start Coordinate, startRadius int, end Coordinate, endRadius int) int {
 	//	return int(distanceSpecifyRadiusFloat(start, float64(startRadius), end, float64(endRadius)))
-	return distancePure(start.x, start.y, end.x, end.y) - startRadius - endRadius
+	return distancePure(CoordinatePair{start, end}) - startRadius - endRadius
 }
 
 func distanceNoRadiusFloat(start Coordinate, end Coordinate) float64 {
@@ -243,22 +244,27 @@ func distanceNoRadiusFloat(start Coordinate, end Coordinate) float64 {
 	return math.Sqrt(math.Pow(float64(start.x-end.x), 2) + math.Pow(float64(start.y-end.y), 2))
 }
 
-var distanceMap map[string]int
+type CoordinatePair struct {
+	start Coordinate
+	end   Coordinate
+}
 
-func distancePure(startX int, startY int, endX int, endY int) int {
-	if startX == endX && startY == endY {
+var distanceMap map[CoordinatePair]int
+
+func distancePure(pair CoordinatePair) int {
+	if pair.start.x == pair.end.x && pair.start.y == pair.end.y {
 		return 0
 	}
-	return int(math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2)))
-	/*
-		distanceString := strconv.Itoa(startX) + ":" + strconv.Itoa(startY) + "|" + strconv.Itoa(endX) + ":" + strconv.Itoa(endY)
-		dista, exists := distanceMap[distanceString]
-		// Not in map, or memory overflow so dista is set at 0
-		if !exists || dista < 1 {
-			dista = int(math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2)))
-			distanceMap[distanceString] = dista
-		}
-		return dista*/
+	//return int(math.Sqrt(math.Pow(float64(startX-endX), 2) + math.Pow(float64(startY-endY), 2)))
+
+	//	distanceString := strconv.Itoa(startX) + ":" + strconv.Itoa(startY) + "|" + strconv.Itoa(endX) + ":" + strconv.Itoa(endY)
+	dista, exists := distanceMap[pair]
+	// Not in map, or memory overflow so dista is set at 0
+	if !exists || dista < 1 {
+		dista = int(math.Sqrt(math.Pow(float64(pair.start.x-pair.end.x), 2) + math.Pow(float64(pair.start.y-pair.end.y), 2)))
+		distanceMap[pair] = dista
+	}
+	return dista
 }
 func overlap(start Coordinate, end Coordinate) float64 {
 	return float64(start.radius) + float64(end.radius) - distanceNoRadiusFloat(start, end)
