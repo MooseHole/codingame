@@ -45,6 +45,7 @@ const towerAddedHP int = 100
 const towerMaxHP int = 800
 const towerRangeCoefficient int = 1000
 const approximateGoldAmount int = 250
+const maxTurns int = 200
 
 type Coordinate struct {
 	x      int
@@ -96,6 +97,7 @@ var gold int
 var touchedSite int
 var myQueen Unit
 var numSites int
+var turnNum int
 
 func coordinateString(coordinate Coordinate) string {
 	return "[" + strconv.Itoa(coordinate.x) + ", " + strconv.Itoa(coordinate.y) + "(" + strconv.Itoa(coordinate.radius) + ")" + "]"
@@ -222,6 +224,7 @@ func initialize() {
 	initializeDescriptors()
 	initializeMaps()
 	initializeStrings()
+	turnNum = 0
 	gold = 0
 	touchedSite = -1
 }
@@ -1029,7 +1032,8 @@ func simulateIterate() {
 	initializeSimulation()
 	//	fmt.Fprint(os.Stderr, "i", time.Now().Sub(start))
 	// Don't simulate 50 or more because tower hp=200-4*iteration
-	for i := 0; i < simulateTurns; i++ {
+	turnsToSimulate := int(math.Min(float64(maxTurns-turnNum), float64(simulateTurns)))
+	for i := 0; i < turnsToSimulate; i++ {
 		stepQueen()
 		stepCreepMove()
 		stepCreepAttack()
@@ -1298,6 +1302,8 @@ func main() {
 		defer close(simulationDone)
 		timer := time.NewTimer(49 * time.Millisecond)
 		defer timer.Stop()
+
+		turnNum++
 
 		// Order is important here
 		getPlayerInput()
