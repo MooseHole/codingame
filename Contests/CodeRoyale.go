@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"time"
 )
 
 //import "os"
@@ -94,6 +95,7 @@ var giant Descriptor
 var gold int
 var touchedSite int
 var myQueen Unit
+var numSites int
 
 func coordinateString(coordinate Coordinate) string {
 	return "[" + strconv.Itoa(coordinate.x) + ", " + strconv.Itoa(coordinate.y) + "(" + strconv.Itoa(coordinate.radius) + ")" + "]"
@@ -159,6 +161,7 @@ func siteString(site Site) string {
 
 func clearUnits() {
 	units = make(map[string][]Unit)
+	distanceSites = make(map[Coordinate][]distanceSite)
 }
 
 func initializeMaps() {
@@ -168,6 +171,7 @@ func initializeMaps() {
 	units = make(map[string][]Unit)
 	sites = make(map[int]Site)
 	distanceMap = make(map[string]int)
+	distanceSites = make(map[Coordinate][]distanceSite)
 }
 
 type Descriptor struct {
@@ -271,33 +275,30 @@ type OwnerTypeDescriptors struct {
 	Type  Descriptor
 }
 
-var distanceSites []distanceSite
-var distanceSiteFrom Coordinate
+var distanceSites map[Coordinate][]distanceSite
 
 func sortSitesByDistance(toUnit Unit, force bool) {
-	// if distances already determined and storted
-	if !force && toUnit.Location.x == distanceSiteFrom.x && toUnit.Location.y == distanceSiteFrom.y {
-		return
-	}
+	place := toUnit.Location
+	_, exists := distanceSites[place]
+	if force || !exists {
+		distanceSites[place] = distanceSites[place][:0]
+		for _, v := range sites {
+			var thisDistanceSite distanceSite
+			thisDistanceSite.Distance = distance(place, v.Location)
+			thisDistanceSite.St = v
+			distanceSites[place] = append(distanceSites[place], thisDistanceSite)
+		}
 
-	distanceSites = distanceSites[:0]
-	distanceSiteFrom = toUnit.Location
-	for _, v := range sites {
-		var thisDistanceSite distanceSite
-		thisDistanceSite.Distance = distance(distanceSiteFrom, v.Location)
-		thisDistanceSite.St = v
-		distanceSites = append(distanceSites, thisDistanceSite)
+		sort.Slice(distanceSites[place], func(i, j int) bool {
+			return distanceSites[place][i].Distance < distanceSites[place][j].Distance
+		})
 	}
-
-	sort.Slice(distanceSites, func(i, j int) bool {
-		return distanceSites[i].Distance < distanceSites[j].Distance
-	})
 }
 
 func getSiteByDistanceDescriptorIndex(toUnit Unit, descriptors []OwnerTypeDescriptors, index int, resort bool) (Site, error) {
 	sortSitesByDistance(toUnit, resort)
 	foundIndex := -1
-	for _, s := range distanceSites {
+	for _, s := range distanceSites[toUnit.Location] {
 		match := false
 		for _, d := range descriptors {
 			if s.St.Owner == d.Owner.index && s.St.Type == d.Type.index {
@@ -1013,7 +1014,7 @@ func simulationScore() int {
 	if maxScore < score {
 		scordy = "^^" + scordy
 	}
-	//	fmt.Fprintln(os.Stderr, "score", score, scordy, siteString(simulationBuild), simulationMove, simulationTrain)
+	//fmt.Fprintln(os.Stderr, "score", score, scordy, siteString(simulationBuild), simulationMove, simulationTrain)
 
 	return score
 }
@@ -1024,7 +1025,9 @@ var bestMove Coordinate
 var bestTrain int
 
 func simulateIterate() {
+	//	fmt.Fprint(os.Stderr, "simulateIterate ", time.Now().Sub(start))
 	initializeSimulation()
+	//	fmt.Fprint(os.Stderr, "i", time.Now().Sub(start))
 	// Don't simulate 50 or more because tower hp=200-4*iteration
 	for i := 0; i < simulateTurns; i++ {
 		stepQueen()
@@ -1038,6 +1041,7 @@ func simulateIterate() {
 			break
 		}
 	}
+	//	fmt.Fprint(os.Stderr, "t", time.Now().Sub(start))
 	thisScore := simulationScore()
 	if maxScore < thisScore {
 		maxScore = thisScore
@@ -1045,6 +1049,8 @@ func simulateIterate() {
 		bestMove = simulationMove
 		bestTrain = simulationTrain
 	}
+
+	//	fmt.Fprintln(os.Stderr, "d", time.Now().Sub(start))
 }
 
 func simulate() {
@@ -1155,6 +1161,8 @@ func simulate() {
 	simulateIterate()
 
 	// Set training sites to what they would be after doing best action
+	simulationBuild = bestBuild
+	simulationMove = bestMove
 	var trainingSites []int
 	for _, s := range sites {
 		// Do not only consider build time at 0.  It will be 0 during simulation and it may be good to wait.
@@ -1172,95 +1180,138 @@ func simulate() {
 	simulationBuild = bestBuild
 	simulationMove = bestMove
 	simulationTrain = bestTrain
+
+	simulationDone <- true
 }
 
-func main() {
-	initialize()
-	var numSites int
+func getInputNumSites() {
 	fmt.Scan(&numSites)
+}
 
+func getGameBaseSitesInput() {
+	getInputNumSites()
 	for i := 0; i < numSites; i++ {
 		var site Site
 		fmt.Scan(&site.Id, &site.Location.x, &site.Location.y, &site.Location.radius)
 		sites[site.Id] = site
 	}
+}
+
+func getGameUpdatedSitesInput() {
+	for i := 0; i < numSites; i++ {
+		var site Site
+		fmt.Scan(&site.Id, &site.Gold, &site.MaxMineSize, &site.Type, &site.Owner, &site.Param1, &site.Param2)
+		site.Location = sites[site.Id].Location
+		site.Cost = 0
+		if barracksUnitType(site) == knight.index {
+			site.Cost = knightCost
+			site.Production = knightProduction
+			site.BuildTime = knightBuildTime
+		}
+		if barracksUnitType(site) == archer.index {
+			site.Cost = archerCost
+			site.Production = archerProduction
+			site.BuildTime = archerBuildTime
+		}
+		if barracksUnitType(site) == giant.index {
+			site.Cost = giantCost
+			site.Production = giantProduction
+			site.BuildTime = giantBuildTime
+		}
+		sites[site.Id] = site
+	}
+}
+
+func getGameUnitsInput() {
+	clearUnits()
+	var numUnits int
+	fmt.Scan(&numUnits)
+
+	for i := 0; i < numUnits; i++ {
+		var unit Unit
+		fmt.Scan(&unit.Location.x, &unit.Location.y, &unit.Owner, &unit.Type, &unit.Health)
+		if unit.Type == queen.index {
+			unit.Location.radius = queenRadius
+			unit.Speed = queenSpeed
+			unit.Mass = queenMass
+		} else if unit.Type == knight.index {
+			unit.Location.radius = knightRadius
+			unit.Speed = knightSpeed
+			unit.Mass = knightMass
+		} else if unit.Type == archer.index {
+			unit.Location.radius = archerRadius
+			unit.Speed = archerSpeed
+			unit.Range = archerRange
+			unit.Mass = archerMass
+		} else if unit.Type == giant.index {
+			unit.Location.radius = giantRadius
+			unit.Speed = giantSpeed
+			unit.Mass = giantMass
+		}
+
+		units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
+	}
+	myQueen = units[friendly.description+queen.description][0]
+}
+
+func getPlayerInput() {
+	fmt.Scan(&gold, &touchedSite)
+}
+
+func getActionString() string {
+	if simulationBuild.Id >= 0 {
+		buildString := siteType[simulationBuild.Type]
+		if simulationBuild.Type == barracks.index {
+			buildString += "-" + unitType[barracksUnitType(simulationBuild)]
+		}
+		return "BUILD " + strconv.Itoa(simulationBuild.Id) + " " + buildString
+	} else if simulationMove.x >= 0 {
+		return "MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y)
+	} else {
+		return "WAIT"
+	}
+}
+
+func getTrainString() string {
+	trainString := ""
+	if simulationTrain >= 0 {
+		if sites[simulationTrain].Owner == friendly.index && sites[simulationTrain].Type == barracks.index {
+			if sites[simulationTrain].Cost <= gold {
+				trainString = trainString + " " + strconv.Itoa(simulationTrain)
+				gold -= sites[simulationTrain].Cost
+			}
+		}
+	}
+	return "TRAIN" + trainString
+}
+
+var simulationDone chan bool
+var start time.Time
+
+func main() {
+	initialize()
+	getGameBaseSitesInput()
+
 	for {
-		clearUnits()
-		// touchedSite: -1 if none
-		fmt.Scan(&gold, &touchedSite)
+		start = time.Now()
+		simulationDone = make(chan bool, 1)
+		defer close(simulationDone)
+		timer := time.NewTimer(49 * time.Millisecond)
+		defer timer.Stop()
 
-		for i := 0; i < numSites; i++ {
-			var site Site
-			fmt.Scan(&site.Id, &site.Gold, &site.MaxMineSize, &site.Type, &site.Owner, &site.Param1, &site.Param2)
-			site.Location = sites[site.Id].Location
-			site.Cost = 0
-			if barracksUnitType(site) == knight.index {
-				site.Cost = knightCost
-				site.Production = knightProduction
-				site.BuildTime = knightBuildTime
-			}
-			if barracksUnitType(site) == archer.index {
-				site.Cost = archerCost
-				site.Production = archerProduction
-				site.BuildTime = archerBuildTime
-			}
-			if barracksUnitType(site) == giant.index {
-				site.Cost = giantCost
-				site.Production = giantProduction
-				site.BuildTime = giantBuildTime
-			}
-			sites[site.Id] = site
-		}
-		var numUnits int
-		fmt.Scan(&numUnits)
-
-		for i := 0; i < numUnits; i++ {
-			var unit Unit
-			fmt.Scan(&unit.Location.x, &unit.Location.y, &unit.Owner, &unit.Type, &unit.Health)
-			if unit.Type == queen.index {
-				unit.Location.radius = queenRadius
-				unit.Speed = queenSpeed
-				unit.Mass = queenMass
-			} else if unit.Type == knight.index {
-				unit.Location.radius = knightRadius
-				unit.Speed = knightSpeed
-				unit.Mass = knightMass
-			} else if unit.Type == archer.index {
-				unit.Location.radius = archerRadius
-				unit.Speed = archerSpeed
-				unit.Range = archerRange
-				unit.Mass = archerMass
-			} else if unit.Type == giant.index {
-				unit.Location.radius = giantRadius
-				unit.Speed = giantSpeed
-				unit.Mass = giantMass
-			}
-
-			units[unitGroupIdentifier(unit)] = append(units[unitGroupIdentifier(unit)], unit)
-		}
-		myQueen = units[friendly.description+queen.description][0]
+		// Order is important here
+		getPlayerInput()
+		getGameUpdatedSitesInput()
+		getGameUnitsInput()
 
 		simulate()
-		if simulationBuild.Id >= 0 {
-			buildString := siteType[simulationBuild.Type]
-			if simulationBuild.Type == barracks.index {
-				buildString += "-" + unitType[barracksUnitType(simulationBuild)]
-			}
-			fmt.Println("BUILD " + strconv.Itoa(simulationBuild.Id) + " " + buildString)
-		} else if simulationMove.x >= 0 {
-			fmt.Println("MOVE " + strconv.Itoa(simulationMove.x) + " " + strconv.Itoa(simulationMove.y))
-		} else {
-			fmt.Println("WAIT")
+		select {
+		case <-simulationDone:
+			//fmt.Fprintln(os.Stderr, "simulation completed", time.Now().Sub(start))
+		case <-timer.C:
+			//fmt.Fprintln(os.Stderr, "simulation timed out", time.Now().Sub(start))
 		}
-		trainString := ""
-		if simulationTrain >= 0 {
-			if sites[simulationTrain].Owner == friendly.index && sites[simulationTrain].Type == barracks.index {
-				if sites[simulationTrain].Cost <= gold {
-					trainString = trainString + " " + strconv.Itoa(simulationTrain)
-					gold -= sites[simulationTrain].Cost
-				}
-			}
-		}
-		fmt.Println("TRAIN" + trainString)
+		fmt.Println(getActionString())
+		fmt.Println(getTrainString())
 	}
 }
