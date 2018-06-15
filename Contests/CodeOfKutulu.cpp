@@ -227,11 +227,15 @@ class Grid
 	public:
 	map<Coordinate, Cell*> cells;
 	vector<Entity*> entities;
+	int width;
+	int height;
 	
 	Grid() {}
 	
-	void addRow(int row, int width, string line)
+	void addRow(int row, int _width, string line)
 	{
+		width = _width;
+		height = row; // WARNING! Assumes addRow is called consecutively and in order
 		Coordinate current(0, row);
 		for (auto i = 0; i < width; ++i)
 		{
@@ -257,25 +261,45 @@ class Grid
 	
 	friend ostream &operator<<(ostream &os, Grid const &m)
 	{
+		os << ' ';
+		int column = 0;
+		for (column = 0; column < m.width; ++column)
+		{
+			os << column;
+		}
+
+		int row = 0;
 		for (auto cell = m.cells.begin(); cell != m.cells.end(); ++cell)
 		{
-			os << cell->second->print();
-			for (auto entity = m.entities.begin(); entity != m.entities.end(); ++entity)
+			if (column >= m.width)
 			{
-				if ((*entity)->location == cell->first)
-				{
-					os << "[" << (*entity)->id << "]";
-				}
+				os << endl;
+				column = 0;
+				os << row++;
 			}
+
+			os << cell->second->print();
+			column++;
 		}
+
 		return os;
 	}
 };
 
 Grid grid;
 
-void checkNextLocation(Coordinate check, Coordinate target, int &closest, Coordinate &next)
+void updateNextLocation(Coordinate check, Coordinate target, int &closest, Coordinate &next)
 {
+	if (check.x < 0 || check.y < 0 || check.x >= grid.width || check.y >= grid.height)
+	{
+		return;
+	}
+	
+	if (!grid.cells[check]->inhabitable())
+	{
+		return;
+	}
+
 	int distance = check.manhattan(target);
 	if (distance < closest)
 	{
@@ -298,23 +322,49 @@ Coordinate getNextLocation(Wanderer* wanderer)
 			Coordinate next = wanderer->location;
 
 			Coordinate check = wanderer->location;
-			checkNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(check, (*it)->location, closest, next);
 			check.x -= 1;
-			checkNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(check, (*it)->location, closest, next);
 			check.x += 2;
-			checkNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(check, (*it)->location, closest, next);
 			check = wanderer->location;
 			check.y -= 1;
-			checkNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(check, (*it)->location, closest, next);
 			check.y += 2;
-			checkNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(check, (*it)->location, closest, next);
 			return next;
 		}
 	}
 	
 	return wanderer->location;
 }
-	
+
+Coordinate getNextLocation(Explorer* explorer)
+{
+	return explorer->location;
+}
+
+Coordinate getNextLocation(Entity* entity)
+{
+	if (entity->type().compare("EXPLORER") == 0)
+	{
+		return getNextLocation(static_cast<Explorer*>(entity));
+	}
+	if (entity->type().compare("WANDERER") == 0)
+	{
+		return getNextLocation(static_cast<Wanderer*>(entity));
+	}
+	return entity->location;
+}
+
+void printLocations()
+{
+	for (auto entity = grid.entities.begin(); entity != grid.entities.end(); ++entity)
+	{
+		cerr << "[" << (*entity)->id << "] at " << (*entity)->location << " to " << getNextLocation(*entity) << endl;
+	}
+}
+
 /**
  * Survive the wrath of Kutulu
  * Coded fearlessly by JohnnyYuge & nmahoude (ok we might have been a bit scared by the old god...but don't say anything)
@@ -354,6 +404,7 @@ int main()
         }
 
 		cerr << grid << endl;
+		printLocations();
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
 
