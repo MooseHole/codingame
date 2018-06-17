@@ -231,7 +231,28 @@ class Grid
 	int height;
 	
 	Grid() {}
+
+	Grid(const Grid &other)
+	{
+		width = other.width;
+		height = other.height;
+
+		// Deep copy the pointers
+		for (auto it = other.cells.begin(); it != other.cells.end(); ++it)
+		{
+			addCell(it->first, it->second);
+		}
+		for (auto it = other.entities.begin(); it != other.entities.end(); ++it)
+		{
+			addEntity(*it);
+		}
+	}
 	
+	void addCell(Coordinate coordinate, Cell* cell)
+	{
+		cells[coordinate] = Cell::Create(cell->print());
+	}
+		
 	void addRow(int row, int _width, string line)
 	{
 		width = _width;
@@ -253,7 +274,12 @@ class Grid
 		
 		entities.clear();
 	}
-	
+
+	void addEntity(Entity* entity)
+	{
+		entities.push_back(Entity::Create(entity->type(), entity->id, entity->location.x, entity->location.y, entity->param0, entity->param1, entity->param2));
+	}
+
 	void addEntity(string type, int _id, int _x, int _y, int _param0, int _param1, int _param2)
 	{
 		entities.push_back(Entity::Create(type, _id, _x, _y, _param0, _param1, _param2));
@@ -357,11 +383,20 @@ Coordinate getNextLocation(Entity* entity)
 	return entity->location;
 }
 
-void printLocations()
+void printLocations(Grid thisGrid)
 {
-	for (auto entity = grid.entities.begin(); entity != grid.entities.end(); ++entity)
+	for (auto entity = thisGrid.entities.begin(); entity != thisGrid.entities.end(); ++entity)
 	{
 		cerr << "[" << (*entity)->id << "] at " << (*entity)->location << " to " << getNextLocation(*entity) << endl;
+	}
+}
+
+void simulate()
+{
+	Grid sim = grid;
+	for (auto it = sim.entities.begin(); it != sim.entities.end(); ++it)
+	{
+		(*it)->location = getNextLocation(*it);
 	}
 }
 
@@ -403,8 +438,9 @@ int main()
 			grid.addEntity(entityType, id, x, y, param0, param1, param2);
         }
 
-		cerr << grid << endl;
-		printLocations();
+//		cerr << grid << endl;
+//		printLocations(grid);
+//		simulate();
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
 
