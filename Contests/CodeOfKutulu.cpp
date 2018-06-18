@@ -3,8 +3,13 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <random>
 
 using namespace std;
+
+enum Direction {DIRECTION_NONE = 0, DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT, DIRECTION_FINAL_ELEMENT};
+static minstd_rand randomEngine(clock());
+static uniform_int_distribution<int> randomMove{0, DIRECTION_FINAL_ELEMENT};
 
 class Coordinate
 {
@@ -54,6 +59,31 @@ class Coordinate
 	int index() const
 	{
 		return 10000 + x * 100 + y;
+	}
+	
+	Coordinate move(Direction direction)
+	{
+		Coordinate returnCoordinate = *this;
+
+		switch(direction)
+		{
+			case DIRECTION_UP:
+				returnCoordinate.y--;
+				break;
+			case DIRECTION_DOWN:
+				returnCoordinate.y++;
+				break;
+			case DIRECTION_LEFT:
+				returnCoordinate.x--;
+				break;
+			case DIRECTION_RIGHT:
+				returnCoordinate.x++;
+				break;
+			default:
+				break;
+		}
+
+		return returnCoordinate;
 	}
 
 	friend ostream &operator<<(ostream &os, Coordinate const &m)
@@ -252,7 +282,6 @@ class Grid
 	{
 		cells[coordinate] = Cell::Create(cell->print());
 	}
-		
 	void addRow(int row, int _width, string line)
 	{
 		width = _width;
@@ -263,6 +292,28 @@ class Grid
 			current.x = i;
 			cells[current] = Cell::Create(line[i]);
 		}
+	}
+	
+	bool inBoundaries(Coordinate location)
+	{
+		return location.x >= 0 && location.y >= 0 && location.x < width && location.y < height;
+	}
+	
+	Coordinate move(int entityId, Direction direction)
+	{
+		return entities[entityId]->location.move(direction);
+	}
+
+	bool canMove(int entityId, Direction direction)
+	{
+		Coordinate newLocation = entities[entityId]->location.move(direction);
+
+		if (!inBoundaries(newLocation))
+		{
+			return false;
+		}
+
+		return cells[newLocation]->inhabitable();
 	}
 	
 	void clearEntities()
@@ -314,18 +365,14 @@ class Grid
 
 Grid grid;
 
-void updateNextLocation(Coordinate check, Coordinate target, int &closest, Coordinate &next)
+void updateNextLocation(int entityId, Direction direction, Coordinate target, int &closest, Coordinate &next)
 {
-	if (check.x < 0 || check.y < 0 || check.x >= grid.width || check.y >= grid.height)
-	{
-		return;
-	}
-	
-	if (!grid.cells[check]->inhabitable())
+	if (!grid.canMove(entityId, direction))
 	{
 		return;
 	}
 
+	Coordinate check = grid.move(entityId, direction);
 	int distance = check.manhattan(target);
 	if (distance < closest)
 	{
@@ -345,19 +392,13 @@ Coordinate getNextLocation(Wanderer* wanderer)
 		if ((*it)->id == wanderer->target())
 		{
 			int closest = 999999;
+			int entityId = wanderer->id;
 			Coordinate next = wanderer->location;
-
-			Coordinate check = wanderer->location;
-			updateNextLocation(check, (*it)->location, closest, next);
-			check.x -= 1;
-			updateNextLocation(check, (*it)->location, closest, next);
-			check.x += 2;
-			updateNextLocation(check, (*it)->location, closest, next);
-			check = wanderer->location;
-			check.y -= 1;
-			updateNextLocation(check, (*it)->location, closest, next);
-			check.y += 2;
-			updateNextLocation(check, (*it)->location, closest, next);
+			updateNextLocation(entityId, DIRECTION_NONE,  (*it)->location, closest, next);
+			updateNextLocation(entityId, DIRECTION_UP,    (*it)->location, closest, next);
+			updateNextLocation(entityId, DIRECTION_RIGHT, (*it)->location, closest, next);
+			updateNextLocation(entityId, DIRECTION_DOWN,  (*it)->location, closest, next);
+			updateNextLocation(entityId, DIRECTION_LEFT,  (*it)->location, closest, next);
 			return next;
 		}
 	}
@@ -367,6 +408,12 @@ Coordinate getNextLocation(Wanderer* wanderer)
 
 Coordinate getNextLocation(Explorer* explorer)
 {
+	Direction direction = static_cast<Direction>(randomMove(randomEngine));
+	if (grid.canMove(explorer->id, direction))
+	{
+		return explorer->location.move(direction);
+	}
+
 	return explorer->location;
 }
 
