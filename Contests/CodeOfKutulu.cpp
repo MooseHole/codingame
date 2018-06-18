@@ -9,7 +9,7 @@ using namespace std;
 
 enum Direction {DIRECTION_NONE = 0, DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT, DIRECTION_FINAL_ELEMENT};
 static minstd_rand randomEngine(clock());
-static uniform_int_distribution<int> randomMove{0, DIRECTION_FINAL_ELEMENT};
+static uniform_int_distribution<int> randomMove{0, DIRECTION_FINAL_ELEMENT-1};
 
 class Coordinate
 {
@@ -63,7 +63,9 @@ class Coordinate
 	
 	Coordinate move(Direction direction)
 	{
-		Coordinate returnCoordinate = *this;
+		Coordinate returnCoordinate;
+		returnCoordinate.x = x;
+		returnCoordinate.y = y;
 
 		switch(direction)
 		{
@@ -102,6 +104,7 @@ class Entity
 		param0 = _param0;
 		param1 = _param1;
 		param2 = _param2;
+		dead = false;
 	}
 	
 	public:
@@ -110,6 +113,7 @@ class Entity
 	int param0;
 	int param1;
 	int param2;
+	bool dead;
 
 	static Entity* Create(string type, int _id, int _x, int _y, int _param0, int _param1, int _param2);
 	virtual string type() const = 0;
@@ -118,8 +122,15 @@ class Entity
 class Explorer : public Entity
 {
 	public:
+	int distanceFromExplorer;
+
 	Explorer(int id, int x, int y, int param0, int param1, int param2) : Entity(id, x, y, param0, param1, param2)
 	{
+	}
+	
+	void removeSanity(int amount)
+	{
+		param0 -= amount;
 	}
 	
 	int sanity() const
@@ -259,8 +270,24 @@ class Grid
 	vector<Entity*> entities;
 	int width;
 	int height;
+	int sanityLossLonely, sanityLossGroup, wandererSpawnTime, wandererLifeTime;
 	
 	Grid() {}
+
+	~Grid()
+	{
+		for (auto it = cells.begin(); it != cells.end();)
+		{
+			delete((*it).second);
+			cells.erase(it++);
+		}
+		cells.clear();
+		for (auto it = entities.begin(); it != entities.end(); ++it)
+		{
+			delete(*it);
+		}
+		entities.clear();
+	}
 
 	Grid(const Grid &other)
 	{
@@ -282,6 +309,7 @@ class Grid
 	{
 		cells[coordinate] = Cell::Create(cell->print());
 	}
+
 	void addRow(int row, int _width, string line)
 	{
 		width = _width;
@@ -293,20 +321,28 @@ class Grid
 			cells[current] = Cell::Create(line[i]);
 		}
 	}
+
+	void addSettings(int _sanityLossLonely, int _sanityLossGroup, int _wandererSpawnTime, int _wandererLifeTime)
+	{
+		sanityLossLonely = _sanityLossLonely;
+		sanityLossGroup = _sanityLossGroup;
+		wandererSpawnTime = _wandererSpawnTime;
+		wandererLifeTime = _wandererLifeTime;
+	}
 	
 	bool inBoundaries(Coordinate location)
 	{
 		return location.x >= 0 && location.y >= 0 && location.x < width && location.y < height;
 	}
 	
-	Coordinate move(int entityId, Direction direction)
+	Coordinate move(Coordinate current, Direction direction)
 	{
-		return entities[entityId]->location.move(direction);
+		return current.move(direction);
 	}
 
-	bool canMove(int entityId, Direction direction)
+	bool canMove(Coordinate current, Direction direction)
 	{
-		Coordinate newLocation = entities[entityId]->location.move(direction);
+		Coordinate newLocation = current.move(direction);
 
 		if (!inBoundaries(newLocation))
 		{
@@ -334,6 +370,99 @@ class Grid
 	void addEntity(string type, int _id, int _x, int _y, int _param0, int _param1, int _param2)
 	{
 		entities.push_back(Entity::Create(type, _id, _x, _y, _param0, _param1, _param2));
+	}
+	
+	int score() const
+	{
+		int score = 0;
+		score += static_cast<Explorer*>(entities[0])->sanity() * 10;
+		score -= static_cast<Explorer*>(entities[1])->sanity();
+		score -= static_cast<Explorer*>(entities[2])->sanity();
+		score -= static_cast<Explorer*>(entities[3])->sanity();
+		return score;
+	}
+	
+	// Process sanity losses
+	void step()
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			if (entities[i]->type().compare("EXPLORER") == 0)
+			{
+				static_cast<Explorer*>(entities[i])->distanceFromExplorer = 99999999;
+			}
+			else
+			{
+				// Explorers are all at the beginning
+				break;
+			}
+		}
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (entities[i]->type().compare("EXPLORER") == 0)
+			{
+				for (int j = i+1; j < 4; j++)
+				{
+					if (entities[j]->type().compare("EXPLORER") == 0)
+					{
+						int thisDistance = static_cast<Explorer*>(entities[i])->location.manhattan(static_cast<Explorer*>(entities[j])->location);
+						if (thisDistance < static_cast<Explorer*>(entities[i])->distanceFromExplorer)
+						{
+							static_cast<Explorer*>(entities[i])->distanceFromExplorer = thisDistance;
+						}
+						if (thisDistance < static_cast<Explorer*>(entities[j])->distanceFromExplorer)
+						{
+							static_cast<Explorer*>(entities[j])->distanceFromExplorer = thisDistance;
+						}
+					}
+				}
+				
+				for (auto entity = entities.begin(); entity != entities.end(); ++entity)
+				{
+					if (entities[i]->location == (*entity)->location)
+					{
+						if ((*entity)->type().compare("WANDERER") == 0)
+						{
+							static_cast<Explorer*>(entities[i])->removeSanity(20);
+							(*entity)->dead = true;
+						}
+					}
+				}
+			}
+		}
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (entities[i]->type().compare("EXPLORER") == 0)
+			{
+				if (static_cast<Explorer*>(entities[i])->distanceFromExplorer <= 2)
+				{
+					static_cast<Explorer*>(entities[i])->removeSanity(sanityLossGroup);
+				}
+				else
+				{
+					static_cast<Explorer*>(entities[i])->removeSanity(sanityLossLonely);
+				}
+				
+				if (static_cast<Explorer*>(entities[i])->sanity() <= 0)
+				{
+					entities[i]->dead = true;
+				}
+			}
+		}
+		
+		for (auto entity = entities.begin(); entity != entities.end();)
+		{
+			if ((*entity)->dead)
+			{
+				entity = entities.erase(entity);
+			}
+			else
+			{
+				++entity;
+			}
+		}
 	}
 	
 	friend ostream &operator<<(ostream &os, Grid const &m)
@@ -365,14 +494,14 @@ class Grid
 
 Grid grid;
 
-void updateNextLocation(int entityId, Direction direction, Coordinate target, int &closest, Coordinate &next)
+void updateNextLocation(Coordinate current, Direction direction, Coordinate target, int &closest, Coordinate &next)
 {
-	if (!grid.canMove(entityId, direction))
+	if (!grid.canMove(current, direction))
 	{
 		return;
 	}
 
-	Coordinate check = grid.move(entityId, direction);
+	Coordinate check = grid.move(current, direction);
 	int distance = check.manhattan(target);
 	if (distance < closest)
 	{
@@ -381,24 +510,24 @@ void updateNextLocation(int entityId, Direction direction, Coordinate target, in
 	}
 }
 
-Coordinate getNextLocation(Wanderer* wanderer)
+Coordinate getNextLocation(Grid thisGrid, Wanderer* wanderer)
 {
 	if (wanderer->target() < 0)
 	{
 		return wanderer->location;
 	}
-	for (auto it = grid.entities.begin(); it != grid.entities.end(); ++it)
+	for (auto it = thisGrid.entities.begin(); it != thisGrid.entities.end(); ++it)
 	{
 		if ((*it)->id == wanderer->target())
 		{
 			int closest = 999999;
-			int entityId = wanderer->id;
+			Coordinate current = wanderer->location;
 			Coordinate next = wanderer->location;
-			updateNextLocation(entityId, DIRECTION_NONE,  (*it)->location, closest, next);
-			updateNextLocation(entityId, DIRECTION_UP,    (*it)->location, closest, next);
-			updateNextLocation(entityId, DIRECTION_RIGHT, (*it)->location, closest, next);
-			updateNextLocation(entityId, DIRECTION_DOWN,  (*it)->location, closest, next);
-			updateNextLocation(entityId, DIRECTION_LEFT,  (*it)->location, closest, next);
+			updateNextLocation(current, DIRECTION_NONE,  (*it)->location, closest, next);
+			updateNextLocation(current, DIRECTION_UP,    (*it)->location, closest, next);
+			updateNextLocation(current, DIRECTION_RIGHT, (*it)->location, closest, next);
+			updateNextLocation(current, DIRECTION_DOWN,  (*it)->location, closest, next);
+			updateNextLocation(current, DIRECTION_LEFT,  (*it)->location, closest, next);
 			return next;
 		}
 	}
@@ -406,10 +535,10 @@ Coordinate getNextLocation(Wanderer* wanderer)
 	return wanderer->location;
 }
 
-Coordinate getNextLocation(Explorer* explorer)
+Coordinate getNextLocation(Grid thisGrid, Explorer* explorer)
 {
 	Direction direction = static_cast<Direction>(randomMove(randomEngine));
-	if (grid.canMove(explorer->id, direction))
+	if (thisGrid.canMove(explorer->location, direction))
 	{
 		return explorer->location.move(direction);
 	}
@@ -417,15 +546,15 @@ Coordinate getNextLocation(Explorer* explorer)
 	return explorer->location;
 }
 
-Coordinate getNextLocation(Entity* entity)
+Coordinate getNextLocation(Grid thisGrid, Entity* entity)
 {
 	if (entity->type().compare("EXPLORER") == 0)
 	{
-		return getNextLocation(static_cast<Explorer*>(entity));
+		return getNextLocation(thisGrid, static_cast<Explorer*>(entity));
 	}
 	if (entity->type().compare("WANDERER") == 0)
 	{
-		return getNextLocation(static_cast<Wanderer*>(entity));
+		return getNextLocation(thisGrid, static_cast<Wanderer*>(entity));
 	}
 	return entity->location;
 }
@@ -434,17 +563,44 @@ void printLocations(Grid thisGrid)
 {
 	for (auto entity = thisGrid.entities.begin(); entity != thisGrid.entities.end(); ++entity)
 	{
-		cerr << "[" << (*entity)->id << "] at " << (*entity)->location << " to " << getNextLocation(*entity) << endl;
+		cerr << "[" << (*entity)->id << "] at " << (*entity)->location << " to " << getNextLocation(thisGrid, *entity) << endl;
 	}
 }
 
-void simulate()
+Coordinate simulate()
 {
-	Grid sim = grid;
-	for (auto it = sim.entities.begin(); it != sim.entities.end(); ++it)
+	int numSteps = 10;
+	int numTrials = 10;
+	int bestScore = -99999999;
+	Coordinate bestMove = grid.entities[0]->location;
+
+	for (auto trial = 0; trial < numTrials; ++trial)
 	{
-		(*it)->location = getNextLocation(*it);
+		Grid sim = grid;
+		bool thisIsFirstMove = true;
+		Coordinate firstMove;
+		for (auto step = 0; step < numSteps; ++step)
+		{
+			for (auto entity = sim.entities.begin(); entity != sim.entities.end(); ++entity)
+			{
+				(*entity)->location = getNextLocation(sim, *entity);
+				if (thisIsFirstMove)
+				{
+					firstMove = (*entity)->location;
+					thisIsFirstMove = false;
+				}
+			}
+			sim.step();
+		}
+		int thisScore = sim.score();
+		if (thisScore > bestScore)
+		{
+			bestScore = thisScore;
+			bestMove = firstMove;
+		}
 	}
+	
+	return bestMove;
 }
 
 /**
@@ -467,6 +623,7 @@ int main()
     int wandererSpawnTime; // how many turns the wanderer take to spawn, always 3 until wood 1
     int wandererLifeTime; // how many turns the wanderer is on map after spawning, always 40 until wood 1
     cin >> sanityLossLonely >> sanityLossGroup >> wandererSpawnTime >> wandererLifeTime; cin.ignore();
+	grid.addSettings(sanityLossLonely, sanityLossGroup, wandererSpawnTime, wandererLifeTime);
 
     // game loop
     while (1) {
@@ -491,6 +648,8 @@ int main()
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
 
-        cout << "WAIT" << endl; // MOVE <x> <y> | WAIT
+//        cout << "WAIT" << endl; // MOVE <x> <y> | WAIT
+		Coordinate bestMove = simulate();
+		cout << "MOVE " << bestMove.x << " " << bestMove.y << endl;
     }
 }
