@@ -7,9 +7,12 @@
 
 using namespace std;
 
+#define SIMULATION_DEADLINE 0.030
+
 enum Direction {DIRECTION_NONE = 0, DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT, DIRECTION_FINAL_ELEMENT};
 static minstd_rand randomEngine(clock());
 static uniform_int_distribution<int> randomMove{0, DIRECTION_FINAL_ELEMENT-1};
+clock_t turnStartTime;
 
 class Coordinate
 {
@@ -570,12 +573,18 @@ void printLocations(Grid thisGrid)
 Coordinate simulate()
 {
 	int numSteps = 10;
-	int numTrials = 10;
+	int numTrials = 10000000;
 	int bestScore = -99999999;
 	Coordinate bestMove = grid.entities[0]->location;
 
 	for (auto trial = 0; trial < numTrials; ++trial)
 	{
+		if (clock() > turnStartTime + (double)CLOCKS_PER_SEC * SIMULATION_DEADLINE)
+		{
+			cerr << "Timeout at trial " << trial << endl;
+			break;
+		}
+
 		Grid sim = grid;
 		bool thisIsFirstMove = true;
 		Coordinate firstMove;
@@ -629,6 +638,7 @@ int main()
     while (1) {
         int entityCount; // the first given entity corresponds to your explorer
         cin >> entityCount; cin.ignore();
+		turnStartTime = clock();
 		grid.clearEntities();
         for (int i = 0; i < entityCount; i++) {
             string entityType;
