@@ -1,30 +1,33 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <map>
 #include <algorithm>
 
 using namespace std;
 
 class Player
 {
+public:
 	int health;
 	int mana;
 	int deck;
 	int rune;
 	bool self;
-	
-	void setup(int index, int _health, int _mana, int _deck, int _rune)
-		: health{ _health }
-		, mana{ _mana }
-		, deck{ _deck }
-		, rune{ _rune }
+
+	void setup (int index, int _health, int _mana, int _deck, int _rune)
 	{
 		self = index == 0;
+		health = _health;
+		mana = _mana;
+		deck = _deck;
+		rune = _rune;
 	}
 };
 
 class Card
 {
+public:
     int number;
     int instanceId;
     int location;
@@ -36,24 +39,21 @@ class Card
     int myHealthChange;
     int opponentHealthChange;
     int cardDraw;
-	
-	void setup(int _number, int _instanceId, _location, _type, _cost, _attack, _defense, _abilities, _myHealthChange, _opponentHealthChange, _cardDraw)
-	: number{ _number }
-	, instanceId{ _instanceId }
-	, location{ _location }
-	, type{ _type }
-	, cost{ _cost }
-	, attack{ _attack }
-	, defense{ _defense }
-	, abilities{ _abilities }
-	, myHealthChange{ _myHealthChange }
-	, opponentHealthChange{ _opponentHealthChange }
-	, cardDraw{ _cardDraw }
-	{}
 
-	
-	
-	
+	void setup (int _number, int _instanceId, int _location, int _type, int _cost, int _attack, int _defense, string _abilities, int _myHealthChange, int _opponentHealthChange, int _cardDraw)
+	{
+		number = _number;
+		instanceId = _instanceId;
+		location = _location;
+		type = _type;
+		cost = _cost;
+		attack = _attack;
+		defense = _defense;
+		abilities = _abilities;
+		myHealthChange = _myHealthChange;
+		opponentHealthChange = _opponentHealthChange;
+		cardDraw = _cardDraw;
+	}
 };
 
 /**
@@ -69,20 +69,20 @@ int main()
 	map<int, Card> opponentSide;
 	int draftCounter = 30;
     // game loop
-    while(1)
+    while (1)
 	{
 		bool drafting = draftCounter > 0;
 		myHand.clear();
 		mySide.clear();
 		opponentSide.clear();
-        for(int i = 0; i < 2; i++)
+        for (int i = 0; i < 2; i++)
 		{
             int playerHealth;
             int playerMana;
             int playerDeck;
             int playerRune;
             cin >> playerHealth >> playerMana >> playerDeck >> playerRune; cin.ignore();
-			if(i==0)
+			if (i==0)
 			{
 				self.setup(i, playerHealth, playerMana, playerDeck, playerRune);
 			}
@@ -91,11 +91,12 @@ int main()
 				opponent.setup(i, playerHealth, playerMana, playerDeck, playerRune);
 			}
         }
+
         int opponentHand;
         cin >> opponentHand; cin.ignore();
         int cardCount;
         cin >> cardCount; cin.ignore();
-        for(int i = 0; i < cardCount; i++)
+        for (int i = 0; i < cardCount; i++)
 		{
             int cardNumber;
             int instanceId;
@@ -109,7 +110,7 @@ int main()
             int opponentHealthChange;
             int cardDraw;
             cin >> cardNumber >> instanceId >> location >> cardType >> cost >> attack >> defense >> abilities >> myHealthChange >> opponentHealthChange >> cardDraw; cin.ignore();
-			if(drafting)
+			if (drafting)
 			{
 				myHand[i] = Card();
 				myHand[i].setup(cardNumber, instanceId, location, cardType, cost, attack, defense, abilities, myHealthChange, opponentHealthChange, cardDraw);
@@ -118,7 +119,7 @@ int main()
 			{
 				Card thisCard;
 				thisCard.setup(cardNumber, instanceId, location, cardType, cost, attack, defense, abilities, myHealthChange, opponentHealthChange, cardDraw);
-				switch(location)
+				switch (location)
 				{
 					case 0:
 						myHand[instanceId] = thisCard;
@@ -127,7 +128,7 @@ int main()
 						mySide[instanceId] = thisCard;
 						break;
 					case -1:
-						oppenentSide[instanceId] = thisCard;
+						opponentSide[instanceId] = thisCard;
 						break;
 				}
 			}
@@ -136,11 +137,11 @@ int main()
 		draftCounter--;
 		
 		string turnOutput = "";
-		if(drafting)
+		if (drafting)
 		{
 			int lowestCost = 1000;
 			int lowestId = -1;
-			for(const auto it = myHand.begin(); it != myHand.end(); ++it)
+			for (auto it = myHand.begin(); it != myHand.end(); ++it)
 			{
 				if(it->second.cost < lowestCost)
 				{
@@ -149,17 +150,25 @@ int main()
 				}
 			}
 			
-			turnOutput = "Pick " << lowestId << ";";
+			if (!turnOutput.empty())
+			{
+				turnOutput += ";";
+			}
+			turnOutput += "PICK " + std::to_string(lowestId);
 		}
 		else
 		{
-			for(const auto it = myHand.begin(); it != myHand.end(); )
+			for (auto it = myHand.begin(); it != myHand.end(); )
 			{
-				if(self.mana >= it->second.cost)
+				if (self.mana >= it->second.cost)
 				{
-					turnOutput += "SUMMON " + it->first + ";";
+					if (!turnOutput.empty())
+					{
+						turnOutput += ";";
+					}
+					turnOutput += "SUMMON " + std::to_string(it->first);
 					self.mana -= it->second.cost;
-					myHand.erase(it);
+					it = myHand.erase(it);
 				}
 				else
 				{
@@ -167,13 +176,17 @@ int main()
 				}
 			}
 			
-			for(const auto it = mySide.begin(); it != mySide.end(); ++it)
+			for(auto it = mySide.begin(); it != mySide.end(); ++it)
 			{
-				turnOutput += "ATTACK " + it->first + " -1;";
+				if (!turnOutput.empty())
+				{
+					turnOutput += ";";
+				}
+				turnOutput += "ATTACK " + std::to_string(it->first) + " -1";
 			}
 		}
 			
-		if(turnOutput.empty())
+		if (turnOutput.empty())
 		{
 			cout << "PASS" << endl;
 		}
