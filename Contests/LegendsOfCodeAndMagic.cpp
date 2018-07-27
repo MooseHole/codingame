@@ -39,6 +39,12 @@ public:
     int myHealthChange;
     int opponentHealthChange;
     int cardDraw;
+	bool breakthrough;
+	bool charge;
+	bool drain;
+	bool guard;
+	bool lethal;
+	bool ward;
 
 	void setup (int _number, int _instanceId, int _location, int _type, int _cost, int _attack, int _defense, string _abilities, int _myHealthChange, int _opponentHealthChange, int _cardDraw)
 	{
@@ -53,6 +59,17 @@ public:
 		myHealthChange = _myHealthChange;
 		opponentHealthChange = _opponentHealthChange;
 		cardDraw = _cardDraw;
+		breakthrough = _abilities[0] == 'B';
+		charge = _abilities[1] == 'C';
+		drain = _abilities[2] == 'D';
+		guard = _abilities[3] == 'G';
+		lethal = _abilities[4] == 'L';
+		ward = _abilities[5] == 'W';
+	}
+	
+	int rawWorth() const
+	{
+		return (12-cost) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)) + (defense*(guard ? 2 : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
 	}
 };
 
@@ -139,14 +156,14 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			int lowestCost = 1000;
-			int lowestId = -1;
+			int highestWorth = -1000;
+			int bestId = -1;
 			for (auto it = myHand.begin(); it != myHand.end(); ++it)
 			{
-				if(it->second.cost < lowestCost)
+				if(it->second.rawWorth() > highestWorth)
 				{
-					lowestId = it->first;
-					lowestCost = it->second.cost;
+					bestId = it->first;
+					highestWorth = it->second.rawWorth();
 				}
 			}
 			
@@ -154,7 +171,7 @@ int main()
 			{
 				turnOutput += ";";
 			}
-			turnOutput += "PICK " + std::to_string(lowestId);
+			turnOutput += "PICK " + std::to_string(bestId);
 		}
 		else
 		{
