@@ -46,7 +46,38 @@ public:
 	bool lethal;
 	bool ward;
 
-	void setup (int _number, int _instanceId, int _location, int _type, int _cost, int _attack, int _defense, string _abilities, int _myHealthChange, int _opponentHealthChange, int _cardDraw)
+	Card()
+	{
+	}
+
+	Card(const Card &other)
+	{
+		*this = other;
+	}
+	
+	Card& operator=(const Card &other)
+	{
+		number = other.number;
+		instanceId = other.instanceId;
+		location = other.location;
+		type = other.type;
+		cost = other.cost;
+		attack = other.attack;
+		defense = other.defense;
+		abilities = other.abilities;
+		myHealthChange = other.myHealthChange;
+		opponentHealthChange = other.opponentHealthChange;
+		cardDraw = other.cardDraw;
+		breakthrough = other.breakthrough;
+		charge = other.charge;
+		drain = other.drain;
+		guard = other.guard;
+		lethal = other.lethal;
+		ward = other.ward;
+		return *this;
+	}
+
+	void setup(int _number, int _instanceId, int _location, int _type, int _cost, int _attack, int _defense, string _abilities, int _myHealthChange, int _opponentHealthChange, int _cardDraw)
 	{
 		number = _number;
 		instanceId = _instanceId;
@@ -185,6 +216,10 @@ int main()
 					}
 					turnOutput += "SUMMON " + std::to_string(it->first);
 					self.mana -= it->second.cost;
+					if (it->second.charge)
+					{
+						mySide[it->first] = it->second;
+					}
 					it = myHand.erase(it);
 				}
 				else
@@ -193,13 +228,31 @@ int main()
 				}
 			}
 			
-			for(auto it = mySide.begin(); it != mySide.end(); ++it)
+			for (auto it = mySide.begin(); it != mySide.end(); ++it)
 			{
-				if (!turnOutput.empty())
+				bool attacked = false;
+				for (auto ito = opponentSide.begin(); !attacked && ito != opponentSide.end(); ++ito)
 				{
-					turnOutput += ";";
+					if (ito->second.guard && ito->second.defense > 0)
+					{
+						attacked = true;
+						ito->second.defense -= it->second.attack;
+						if (!turnOutput.empty())
+						{
+							turnOutput += ";";
+						}
+						turnOutput += "ATTACK " + std::to_string(it->first) + " " + std::to_string(ito->first);
+					}
 				}
-				turnOutput += "ATTACK " + std::to_string(it->first) + " -1";
+				
+				if (!attacked)
+				{
+					if (!turnOutput.empty())
+					{
+						turnOutput += ";";
+					}
+					turnOutput += "ATTACK " + std::to_string(it->first) + " -1";
+				}
 			}
 		}
 			
