@@ -23,6 +23,11 @@ public:
 		deck = _deck;
 		rune = _rune;
 	}
+	
+	void cast (int cost)
+	{
+		mana -= cost;
+	}
 };
 
 class Card
@@ -55,6 +60,28 @@ public:
 		*this = other;
 	}
 	
+	Card& operator=(const Card &&other)
+	{
+		number = std::move(other.number);
+		instanceId = std::move(other.instanceId);
+		location = std::move(other.location);
+		type = std::move(other.type);
+		cost = std::move(other.cost);
+		attack = std::move(other.attack);
+		defense = std::move(other.defense);
+		abilities = std::move(other.abilities);
+		myHealthChange = std::move(other.myHealthChange);
+		opponentHealthChange = std::move(other.opponentHealthChange);
+		cardDraw = std::move(other.cardDraw);
+		breakthrough = std::move(other.breakthrough);
+		charge = std::move(other.charge);
+		drain = std::move(other.drain);
+		guard = std::move(other.guard);
+		lethal = std::move(other.lethal);
+		ward = std::move(other.ward);
+		return *this;
+	}
+
 	Card& operator=(const Card &other)
 	{
 		number = other.number;
@@ -104,6 +131,79 @@ public:
 	}
 };
 
+class Deck
+{
+public:
+	map<int, Card> cards;
+
+	void clear()
+	{
+		cards.clear();
+	}
+
+	void putCard(int instanceId, Card&& card)
+	{
+		cards[instanceId] = std::move(card);
+	}
+	
+	Card getCard(int instanceId)
+	{
+		return cards[instanceId];
+	}
+	
+	void removeCard(int instanceId)
+	{
+		cards.erase(instanceId);
+	}
+
+	int nextGuard() const
+	{
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			if (it->second.guard && it->second.defense > 0)
+			{
+				return it->first;
+			}
+		}
+		
+		return -1;
+	}
+	
+	void damageCard(int instanceId, int damage)
+	{
+		cards[instanceId].defense -= damage;
+	}
+	
+	int highestWorth() const
+	{
+		int highestWorth = -1000;
+		int bestId = -1;
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			if(it->second.rawWorth() > highestWorth)
+			{
+				bestId = it->first;
+				highestWorth = it->second.rawWorth();
+			}
+		}
+
+		return bestId;
+	}
+	
+	int nextCanCast(int mana) const
+	{
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			if (it->second.cost <= mana)
+			{
+				return it->first;
+			}
+		}
+		
+		return -1;
+	}
+};
+
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
@@ -112,9 +212,9 @@ int main()
 {
 	Player self;
 	Player opponent;
-	map<int, Card> myHand;
-	map<int, Card> mySide;
-	map<int, Card> opponentSide;
+	Deck myHand;
+	Deck mySide;
+	Deck opponentSide;
 	int draftCounter = 30;
     // game loop
     while (1)
@@ -160,8 +260,9 @@ int main()
             cin >> cardNumber >> instanceId >> location >> cardType >> cost >> attack >> defense >> abilities >> myHealthChange >> opponentHealthChange >> cardDraw; cin.ignore();
 			if (drafting)
 			{
-				myHand[i] = Card();
-				myHand[i].setup(cardNumber, instanceId, location, cardType, cost, attack, defense, abilities, myHealthChange, opponentHealthChange, cardDraw);
+				Card thisCard;
+				thisCard.setup(cardNumber, instanceId, location, cardType, cost, attack, defense, abilities, myHealthChange, opponentHealthChange, cardDraw);
+				myHand.putCard(i, std::move(thisCard));
 			}
 			else
 			{
@@ -170,13 +271,13 @@ int main()
 				switch (location)
 				{
 					case 0:
-						myHand[instanceId] = thisCard;
+						myHand.putCard(instanceId, std::move(thisCard));
 						break;
 					case 1:
-						mySide[instanceId] = thisCard;
+						mySide.putCard(instanceId, std::move(thisCard));
 						break;
 					case -1:
-						opponentSide[instanceId] = thisCard;
+						opponentSide.putCard(instanceId, std::move(thisCard));
 						break;
 				}
 			}
@@ -187,72 +288,39 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			int highestWorth = -1000;
-			int bestId = -1;
-			for (auto it = myHand.begin(); it != myHand.end(); ++it)
-			{
-				if(it->second.rawWorth() > highestWorth)
-				{
-					bestId = it->first;
-					highestWorth = it->second.rawWorth();
-				}
-			}
-			
-			if (!turnOutput.empty())
-			{
-				turnOutput += ";";
-			}
-			turnOutput += "PICK " + std::to_string(bestId);
+			turnOutput += "PICK " + std::to_string(myHand.highestWorth());
 		}
 		else
 		{
-			for (auto it = myHand.begin(); it != myHand.end(); )
+			for (int next = myHand.nextCanCast(self.mana); next >= 0; next = myHand.nextCanCast(self.mana))
 			{
-				if (self.mana >= it->second.cost)
+				Card summonCard = myHand.getCard(next);
+				myHand.removeCard(next);
+
+				if (!turnOutput.empty())
 				{
-					if (!turnOutput.empty())
-					{
-						turnOutput += ";";
-					}
-					turnOutput += "SUMMON " + std::to_string(it->first);
-					self.mana -= it->second.cost;
-					if (it->second.charge)
-					{
-						mySide[it->first] = it->second;
-					}
-					it = myHand.erase(it);
+					turnOutput += ";";
 				}
-				else
+				turnOutput += "SUMMON " + std::to_string(summonCard.instanceId);
+				self.cast(summonCard.cost);
+				if (summonCard.charge)
 				{
-					++it;
+					mySide.putCard(summonCard.instanceId, std::move(summonCard));
 				}
 			}
-			
-			for (auto it = mySide.begin(); it != mySide.end(); ++it)
+
+			for (auto it = mySide.cards.begin(); it != mySide.cards.end(); ++it)
 			{
-				bool attacked = false;
-				for (auto ito = opponentSide.begin(); !attacked && ito != opponentSide.end(); ++ito)
+				int target = opponentSide.nextGuard();
+				if (target >= 0)
 				{
-					if (ito->second.guard && ito->second.defense > 0)
-					{
-						attacked = true;
-						ito->second.defense -= it->second.attack;
-						if (!turnOutput.empty())
-						{
-							turnOutput += ";";
-						}
-						turnOutput += "ATTACK " + std::to_string(it->first) + " " + std::to_string(ito->first);
-					}
+					opponentSide.damageCard(target, it->second.attack);
 				}
-				
-				if (!attacked)
+				if (!turnOutput.empty())
 				{
-					if (!turnOutput.empty())
-					{
-						turnOutput += ";";
-					}
-					turnOutput += "ATTACK " + std::to_string(it->first) + " -1";
+					turnOutput += ";";
 				}
+				turnOutput += "ATTACK " + std::to_string(it->first) + " " + std::to_string(target);
 			}
 		}
 			
