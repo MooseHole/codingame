@@ -137,7 +137,25 @@ public:
 	{
 		return (12-cost) + (lethal ? 10 : 0) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)*(drain ? 2 : 1)) + (defense*(guard ? (ward ? 5 : 3) : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
 	}
+	
 };
+
+
+Card compareTarget;
+// All cards are assumed to be isCreature.  lhs and rhs are assumed to be !hasAttacked.
+bool compareAttacker(Card lhs, Card rhs)
+{
+	if (lhs.lethal && rhs.lethal) return lhs.attack < rhs.attack;
+	if (lhs.lethal && !rhs.lethal) return true;
+	if (!lhs.lethal && rhs.lethal) return false;
+	if (lhs.attack == compareTarget.defense && rhs.attack == compareTarget.defense) return lhs.rawWorth() < rhs.rawWorth();
+	if (lhs.attack == compareTarget.defense && rhs.attack != compareTarget.defense) return true;
+	if (lhs.attack != compareTarget.defense && rhs.attack == compareTarget.defense) return false;
+	if (lhs.attack > compareTarget.defense && rhs.attack < compareTarget.defense) return true;
+	if (lhs.attack > compareTarget.defense && rhs.attack > compareTarget.defense) return lhs.rawWorth() < rhs.rawWorth();
+	if (lhs.attack < compareTarget.defense && rhs.attack < compareTarget.defense) return lhs.attack > rhs.attack;
+	return lhs.rawWorth() < rhs.rawWorth();
+}
 
 class Deck
 {
@@ -164,7 +182,7 @@ public:
 		cards.erase(instanceId);
 	}
 
-	int nextGuard() const
+	int nextOpponent() const
 	{
 		for (auto it = cards.begin(); it != cards.end(); ++it)
 		{
@@ -174,6 +192,27 @@ public:
 			}
 		}
 		
+		return -1;
+	}
+
+	int nextAttacker(Card& target) const
+	{
+		compareTarget = target;
+		vector<Card> attackers;
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			if (!it->second.hasAttacked)
+			{
+				attackers.push_back(it->second);
+			}
+		}
+		
+		if (attackers.size() > 0)
+		{
+			sort (attackers.begin(), attackers.end(), compareAttacker);
+			return attackers[0].instanceId;
+		}
+
 		return -1;
 	}
 	
@@ -390,16 +429,22 @@ int main()
 				}
 			}
 
-			for (auto it = mySide.cards.begin(); it != mySide.cards.end(); ++it)
+			while (true)
 			{
-				if (it->second.isCreature && !it->second.hasAttacked)
+				int target = opponentSide.nextOpponent();
+				int source = mySide.nextAttacker(opponentSide.cards[target]);
+				if (source >= 0)
 				{
-					int target = opponentSide.nextGuard();
 					if (target >= 0)
 					{
-						opponentSide.damageCard(target, it->second.attack, it->second.lethal);
+						opponentSide.damageCard(target, mySide.cards[source].attack, mySide.cards[source].lethal);
 					}
-					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", it->first, target);
+					mySide.cards[source].hasAttacked = true;
+					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", source, target);
+				}
+				else
+				{
+					break;
 				}
 			}
 		}
