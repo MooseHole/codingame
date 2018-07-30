@@ -50,6 +50,8 @@ public:
 	bool guard;
 	bool lethal;
 	bool ward;
+	bool isCreature;
+	bool hasAttacked;
 
 	Card()
 	{
@@ -79,6 +81,8 @@ public:
 		guard = std::move(other.guard);
 		lethal = std::move(other.lethal);
 		ward = std::move(other.ward);
+		isCreature = std::move(other.isCreature);
+		hasAttacked = std::move(other.hasAttacked);
 		return *this;
 	}
 
@@ -101,6 +105,8 @@ public:
 		guard = other.guard;
 		lethal = other.lethal;
 		ward = other.ward;
+		isCreature = other.isCreature;
+		hasAttacked = other.hasAttacked;
 		return *this;
 	}
 
@@ -123,6 +129,8 @@ public:
 		guard = _abilities[3] == 'G';
 		lethal = _abilities[4] == 'L';
 		ward = _abilities[5] == 'W';
+		isCreature = _type == 0;
+		hasAttacked = false;
 	}
 	
 	int rawWorth() const
@@ -171,7 +179,14 @@ public:
 	
 	void damageCard(int instanceId, int damage)
 	{
-		cards[instanceId].defense -= damage;
+		if (cards[instanceId].ward)
+		{
+			cards[instanceId].ward = false;
+		}
+		else
+		{
+			cards[instanceId].defense -= damage;
+		}
 	}
 	
 	int highestWorth() const
@@ -203,6 +218,21 @@ public:
 		return -1;
 	}
 };
+
+string appendOutput(string&& currentOutput, string action, int source, int target=-10000)
+{
+	if (!currentOutput.empty())
+	{
+		currentOutput += ";";
+	}
+	currentOutput += action + " " + std::to_string(source);
+	if (target != -10000)
+	{
+		currentOutput += " " + std::to_string(target);
+	}
+
+	return (std::move(currentOutput));
+}
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -288,39 +318,71 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			turnOutput += "PICK " + std::to_string(myHand.highestWorth());
+			turnOutput = appendOutput(std::move(turnOutput), "PICK", myHand.highestWorth());
 		}
 		else
 		{
 			for (int next = myHand.nextCanCast(self.mana); next >= 0; next = myHand.nextCanCast(self.mana))
 			{
-				Card summonCard = myHand.getCard(next);
+				Card nextCard = myHand.getCard(next);
 				myHand.removeCard(next);
 
-				if (!turnOutput.empty())
+				if (nextCard.isCreature)
 				{
-					turnOutput += ";";
+					turnOutput = appendOutput(std::move(turnOutput), "SUMMON", nextCard.instanceId);
+
+					self.cast(nextCard.cost);
+					if (!nextCard.charge)
+					{
+						nextCard.hasAttacked = true;
+					}
+					mySide.putCard(nextCard.instanceId, std::move(nextCard));
 				}
-				turnOutput += "SUMMON " + std::to_string(summonCard.instanceId);
-				self.cast(summonCard.cost);
-				if (summonCard.charge)
+				else
 				{
-					mySide.putCard(summonCard.instanceId, std::move(summonCard));
+					switch (nextCard.type)
+					{
+						case 1:
+							// Green, for positive for creatures
+							for (auto it = mySide.cards.begin(); it != mySide.cards.end(); ++it)
+							{
+								if (it->second.isCreature)
+								{
+									turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, it->first);
+									break;
+								}
+							}
+							break;
+						case 2:
+							// Red, for negative for creatures
+							for (auto it = opponentSide.cards.begin(); it != opponentSide.cards.end(); ++it)
+							{
+								if (it->second.isCreature)
+								{
+									turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, it->first);
+									break;
+								}
+							}
+							break;
+						case 3:
+							// Blue, generally use on players
+							turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, -1);
+							break;
+					}
 				}
 			}
 
 			for (auto it = mySide.cards.begin(); it != mySide.cards.end(); ++it)
 			{
-				int target = opponentSide.nextGuard();
-				if (target >= 0)
+				if (it->second.isCreature && !it->second.hasAttacked)
 				{
-					opponentSide.damageCard(target, it->second.attack);
+					int target = opponentSide.nextGuard();
+					if (target >= 0)
+					{
+						opponentSide.damageCard(target, it->second.attack);
+					}
+					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", it->first, target);
 				}
-				if (!turnOutput.empty())
-				{
-					turnOutput += ";";
-				}
-				turnOutput += "ATTACK " + std::to_string(it->first) + " " + std::to_string(target);
 			}
 		}
 			
