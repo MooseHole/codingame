@@ -135,7 +135,7 @@ public:
 	
 	int rawWorth() const
 	{
-		return (12-cost) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)) + (defense*(guard ? 2 : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
+		return (12-cost) + (lethal ? 10 : 0) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)*(drain ? 2 : 1)) + (defense*(guard ? (ward ? 5 : 3) : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
 	}
 };
 
@@ -177,15 +177,24 @@ public:
 		return -1;
 	}
 	
-	void damageCard(int instanceId, int damage)
+	void damageCard(int instanceId, int damage, bool lethal)
 	{
 		if (cards[instanceId].ward)
 		{
 			cards[instanceId].ward = false;
 		}
+		else if (lethal)
+		{
+			cards[instanceId].defense = 0;
+		}
 		else
 		{
 			cards[instanceId].defense -= damage;
+		}
+		
+		if (cards[instanceId].defense <= 0)
+		{
+			removeCard(instanceId);
 		}
 	}
 	
@@ -219,7 +228,7 @@ public:
 	}
 };
 
-string appendOutput(string&& currentOutput, string action, int source, int target=-10000)
+string appendOutput(string&& currentOutput, string action, int source, int target, string comment="")
 {
 	if (!currentOutput.empty())
 	{
@@ -230,8 +239,17 @@ string appendOutput(string&& currentOutput, string action, int source, int targe
 	{
 		currentOutput += " " + std::to_string(target);
 	}
+	if (!comment.empty())
+	{
+		currentOutput += " " + comment;
+	}
 
 	return (std::move(currentOutput));
+}
+
+string appendOutput(string&& currentOutput, string action, int source, string comment="")
+{
+	return appendOutput(std::move(currentOutput), action, source, -10000, comment);
 }
 
 /**
@@ -379,7 +397,7 @@ int main()
 					int target = opponentSide.nextGuard();
 					if (target >= 0)
 					{
-						opponentSide.damageCard(target, it->second.attack);
+						opponentSide.damageCard(target, it->second.attack, it->second.lethal);
 					}
 					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", it->first, target);
 				}
