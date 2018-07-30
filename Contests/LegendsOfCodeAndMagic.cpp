@@ -138,6 +138,15 @@ public:
 		return (12-cost) + (lethal ? 10 : 0) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)*(drain ? 2 : 1)) + (defense*(guard ? (ward ? 5 : 3) : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
 	}
 	
+	int abilityMatch(Card compare) const
+	{
+		return ((breakthrough && compare.breakthrough) ? 1 : 0)
+			 + ((charge && compare.charge) ? 1 : 0)
+			 + ((drain && compare.drain) ? 1 : 0)
+			 + ((guard && compare.guard) ? 1 : 0)
+			 + ((lethal && compare.lethal) ? 1 : 0)
+			 + ((ward && compare.ward) ? 1 : 0);
+	}
 };
 
 
@@ -182,7 +191,17 @@ public:
 		cards.erase(instanceId);
 	}
 
-	int nextOpponent() const
+	int firstCard() const
+	{
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			return it->first;
+		}
+		
+		return -1;
+	}
+
+	int nextTarget() const
 	{
 		for (auto it = cards.begin(); it != cards.end(); ++it)
 		{
@@ -193,6 +212,50 @@ public:
 		}
 		
 		return -1;
+	}
+	
+	int friendToEnchant(Card enchantment) const
+	{
+		int lowestMatch = 10000;
+		int target = -1;
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			int match = it->second.abilityMatch(enchantment);
+			if (lowestMatch > match)
+			{
+				lowestMatch = match;
+				target = it->first;
+			}
+		}
+		
+		return target;
+	}
+
+	int enemyToEnchant(Card enchantment) const
+	{
+		int highestMatch = -10000;
+		int target = -1;
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			int match = it->second.abilityMatch(enchantment);
+			if (highestMatch < match)
+			{
+				highestMatch = match;
+				target = it->first;
+			}
+		}
+		
+		// If no abilities removed for anyone
+		if (highestMatch == 0)
+		{
+			int target = nextTarget();
+			if (target == -1)
+			{
+				target = firstCard();
+			}
+		}
+		
+		return target;
 	}
 
 	int nextAttacker(Card& target) const
@@ -397,41 +460,42 @@ int main()
 				}
 				else
 				{
+					int target = -1;
+					bool use = false;
 					switch (nextCard.type)
 					{
 						case 1:
 							// Green, for positive for creatures
-							for (auto it = mySide.cards.begin(); it != mySide.cards.end(); ++it)
+							target = mySide.friendToEnchant(nextCard);
+							if (target >= 0)
 							{
-								if (it->second.isCreature)
-								{
-									turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, it->first);
-									break;
-								}
+								use = true;
 							}
 							break;
 						case 2:
 							// Red, for negative for creatures
-							for (auto it = opponentSide.cards.begin(); it != opponentSide.cards.end(); ++it)
+							target = opponentSide.enemyToEnchant(nextCard);
+							if (target >= 0)
 							{
-								if (it->second.isCreature)
-								{
-									turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, it->first);
-									break;
-								}
+								use = true;
 							}
 							break;
 						case 3:
 							// Blue, generally use on players
-							turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, -1);
+							use = true;
 							break;
+					}
+
+					if (use)
+					{
+						turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, target);
 					}
 				}
 			}
 
 			while (true)
 			{
-				int target = opponentSide.nextOpponent();
+				int target = opponentSide.nextTarget();
 				int source = mySide.nextAttacker(opponentSide.cards[target]);
 				if (source >= 0)
 				{
