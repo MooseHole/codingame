@@ -173,6 +173,11 @@ bool compareAttacker(Card lhs, Card rhs)
 	return lhs.rawWorth() < rhs.rawWorth();
 }
 
+bool compareRawWorth(Card lhs, Card rhs)
+{
+	return lhs.rawWorth() < rhs.rawWorth();
+}
+
 class Deck
 {
 public:
@@ -341,11 +346,24 @@ public:
 	
 	int nextCanCast(int mana) const
 	{
+		vector<Card> casts;
 		for (auto it = cards.begin(); it != cards.end(); ++it)
 		{
-			if (it->second.cost <= mana)
+			if (!it->second.hasAttacked)
 			{
-				return it->first;
+				casts.push_back(it->second);
+			}
+		}
+		
+		if (casts.size() > 0)
+		{
+			sort (casts.begin(), casts.end(), compareRawWorth);
+			for (auto it = casts.begin(); it != casts.end(); ++it)
+			{
+				if (it->cost <= mana)
+				{
+					return it->instanceId;
+				}
 			}
 		}
 		
