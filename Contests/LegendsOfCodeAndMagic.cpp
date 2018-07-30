@@ -135,7 +135,12 @@ public:
 	
 	int rawWorth() const
 	{
-		return (12-cost) + (lethal ? 10 : 0) + (attack*(breakthrough ? 4 : 2)*(charge ? 2 : 1)*(drain ? 2 : 1)) + (defense*(guard ? (ward ? 5 : 3) : 1)) + myHealthChange - opponentHealthChange + (cardDraw*5);
+		return (lethal ? 10 : 0)
+			 + (attack*2*(breakthrough ? 4 : 1)*(charge ? 2 : 1)*(drain ? 2 : 1))
+			 + (defense*(guard ? (ward ? 5 : 3) : 1))
+			 + myHealthChange
+			 - opponentHealthChange
+			 + (cardDraw*5);
 	}
 	
 	int abilityMatch(Card compare) const
@@ -154,6 +159,8 @@ Card compareTarget;
 // All cards are assumed to be isCreature.  lhs and rhs are assumed to be !hasAttacked.
 bool compareAttacker(Card lhs, Card rhs)
 {
+	if (!lhs.guard && rhs.guard) return true;
+	if (lhs.guard && !rhs.guard) return false;
 	if (lhs.lethal && rhs.lethal) return lhs.attack < rhs.attack;
 	if (lhs.lethal && !rhs.lethal) return true;
 	if (!lhs.lethal && rhs.lethal) return false;
@@ -316,6 +323,22 @@ public:
 		return bestId;
 	}
 	
+	int bestPick() const
+	{
+		int highestWorth = -1000;
+		int bestId = -1;
+		for (auto it = cards.begin(); it != cards.end(); ++it)
+		{
+			if(it->second.rawWorth() > highestWorth)
+			{
+				bestId = it->first;
+				highestWorth = (12-it->second.cost) + it->second.rawWorth();
+			}
+		}
+
+		return bestId;
+	}
+	
 	int nextCanCast(int mana) const
 	{
 		for (auto it = cards.begin(); it != cards.end(); ++it)
@@ -438,7 +461,7 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			turnOutput = appendOutput(std::move(turnOutput), "PICK", myHand.highestWorth());
+			turnOutput = appendOutput(std::move(turnOutput), "PICK", myHand.bestPick());
 		}
 		else
 		{
