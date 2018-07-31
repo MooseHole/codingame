@@ -234,6 +234,20 @@ public:
 	{
 		cards.erase(instanceId);
 	}
+	
+	void enchant(int instanceId, Card enchantment)
+	{
+		cards[instanceId].attack += enchantment.attack;
+		cards[instanceId].defense += enchantment.defense;
+		// True if Green, False otherwise
+		bool abilityModifier = (enchantment.type == 1);
+		if (enchantment.breakthrough) cards[instanceId].breakthrough = abilityModifier;
+		if (enchantment.charge) cards[instanceId].charge = abilityModifier;
+		if (enchantment.drain) cards[instanceId].drain = abilityModifier;
+		if (enchantment.guard) cards[instanceId].guard = abilityModifier;
+		if (enchantment.lethal) cards[instanceId].lethal = abilityModifier;
+		if (enchantment.ward) cards[instanceId].ward = abilityModifier;
+	}
 
 	int firstCard() const
 	{
@@ -323,25 +337,35 @@ public:
 		return -1;
 	}
 	
-	void damageCard(int instanceId, int damage, bool lethal)
+	int damageCard(int instanceId, Card attacker)
 	{
+		int totalDamage = 0;
 		if (cards[instanceId].ward)
 		{
 			cards[instanceId].ward = false;
 		}
-		else if (lethal)
+		else if (attacker.lethal)
 		{
+			totalDamage = cards[instanceId].defense;
 			cards[instanceId].defense = 0;
 		}
 		else
 		{
-			cards[instanceId].defense -= damage;
+			totalDamage = std::min(cards[instanceId].defense, attacker.attack);
+			cards[instanceId].defense -= attacker.attack;
 		}
 		
 		if (cards[instanceId].defense <= 0)
 		{
 			removeCard(instanceId);
 		}
+		
+		if (attacker.drain)
+		{
+			return totalDamage;
+		}
+
+		return 0;
 	}
 	
 	int highestWorth() const
@@ -542,6 +566,7 @@ int main()
 							target = mySide.friendToEnchant(nextCard);
 							if (target >= 0)
 							{
+								mySide.enchant(target, nextCard);
 								use = true;
 							}
 							break;
@@ -550,6 +575,7 @@ int main()
 							target = opponentSide.enemyToEnchant(nextCard);
 							if (target >= 0)
 							{
+								opponentSide.enchant(target, nextCard);
 								use = true;
 							}
 							break;
@@ -561,6 +587,9 @@ int main()
 
 					if (use)
 					{
+						self.health += nextCard.myHealthChange;
+						opponent.health += nextCard.opponentHealthChange;
+						// TODO Modify card draws
 						turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, target);
 					}
 				}
@@ -574,7 +603,7 @@ int main()
 				{
 					if (target >= 0)
 					{
-						opponentSide.damageCard(target, mySide.cards[source].attack, mySide.cards[source].lethal);
+						self.health += opponentSide.damageCard(target, mySide.cards[source]);
 					}
 					mySide.cards[source].hasAttacked = true;
 					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", source, target);
