@@ -5,6 +5,19 @@
 #include <algorithm>
 
 using namespace std;
+#define MAX_CHEAP 2
+#define MIN_ENCHANT 3
+#define NO_TARGET -10000
+#define LETHAL_SCORE 10
+#define ATTACK_SCORE 2
+#define BREAKTHROUGH_SCORE 4
+#define CHARGE_SCORE 2
+#define DRAIN_SCORE 2
+#define GUARD_SCORE 3
+#define GUARD_AND_WARD_SCORE 5
+#define HEAL_ME_SCORE 2
+#define DAMAGE_THEM_SCORE 3
+#define DRAW_SCORE 5
 
 class Player
 {
@@ -135,22 +148,22 @@ public:
 	
 	int rawWorth() const
 	{
-		return (lethal ? 10 : 0)
-			 + (attack*2*(breakthrough ? 4 : 1)*(charge ? 2 : 1)*(drain ? 2 : 1))
-			 + (defense*(guard ? (ward ? 5 : 3) : 1))
-			 + myHealthChange
-			 - opponentHealthChange
-			 + (cardDraw*5);
+		return (lethal ? LETHAL_SCORE : 0)
+			 + (attack*ATTACK_SCORE*(breakthrough ? BREAKTHROUGH_SCORE : 1)*(charge ? CHARGE_SCORE : 1)*(drain ? DRAIN_SCORE : 1))
+			 + (defense*(guard ? (ward ? GUARD_AND_WARD_SCORE : GUARD_SCORE) : 1))
+			 + myHealthChange * HEAL_ME_SCORE
+			 - opponentHealthChange * DAMAGE_THEM_SCORE
+			 + (cardDraw*DRAW_SCORE);
 	}
 	
 	int abilityMatch(Card compare) const
 	{
 		return ((breakthrough && compare.breakthrough) ? 1 : 0)
-			 + ((charge && compare.charge) ? 1 : 0)
-			 + ((drain && compare.drain) ? 1 : 0)
-			 + ((guard && compare.guard) ? 1 : 0)
-			 + ((lethal && compare.lethal) ? 1 : 0)
-			 + ((ward && compare.ward) ? 1 : 0);
+			 + ((charge       && compare.charge)       ? 1 : 0)
+			 + ((drain        && compare.drain)        ? 1 : 0)
+			 + ((guard        && compare.guard)        ? 1 : 0)
+			 + ((lethal       && compare.lethal)       ? 1 : 0)
+			 + ((ward         && compare.ward)         ? 1 : 0);
 	}
 };
 
@@ -178,6 +191,20 @@ bool compareRawWorth(Card lhs, Card rhs)
 	return lhs.rawWorth() < rhs.rawWorth();
 }
 
+bool compareCheap(Card lhs, Card rhs)
+{
+	if (lhs.cost < rhs.cost) return true;
+	if (lhs.cost == rhs.cost) return compareRawWorth(lhs, rhs);
+	return false;
+}
+
+bool compareEnchant(Card lhs, Card rhs)
+{
+	if (!lhs.isCreature && rhs.isCreature) return true;
+	if (lhs.isCreature && !rhs.isCreature) return false;
+	return compareRawWorth(lhs, rhs);
+}
+
 class Deck
 {
 public:
@@ -186,6 +213,11 @@ public:
 	void clear()
 	{
 		cards.clear();
+	}
+	
+	int size() const
+	{
+		return cards.size();
 	}
 
 	void putCard(int instanceId, Card&& card)
@@ -344,7 +376,7 @@ public:
 		return bestId;
 	}
 	
-	int nextCanCast(int mana) const
+	int nextCanCast(int mana, int creaturesInPlay) const
 	{
 		vector<Card> casts;
 		for (auto it = cards.begin(); it != cards.end(); ++it)
@@ -357,7 +389,7 @@ public:
 		
 		if (casts.size() > 0)
 		{
-			sort (casts.begin(), casts.end(), compareRawWorth);
+			sort (casts.begin(), casts.end(), ((creaturesInPlay >= MIN_ENCHANT) ? compareEnchant : ((creaturesInPlay < MAX_CHEAP) ? compareCheap : compareRawWorth)));
 			for (auto it = casts.begin(); it != casts.end(); ++it)
 			{
 				if (it->cost <= mana)
@@ -378,7 +410,7 @@ string appendOutput(string&& currentOutput, string action, int source, int targe
 		currentOutput += ";";
 	}
 	currentOutput += action + " " + std::to_string(source);
-	if (target != -10000)
+	if (target != NO_TARGET)
 	{
 		currentOutput += " " + std::to_string(target);
 	}
@@ -392,7 +424,7 @@ string appendOutput(string&& currentOutput, string action, int source, int targe
 
 string appendOutput(string&& currentOutput, string action, int source, string comment="")
 {
-	return appendOutput(std::move(currentOutput), action, source, -10000, comment);
+	return appendOutput(std::move(currentOutput), action, source, NO_TARGET, comment);
 }
 
 /**
@@ -483,7 +515,7 @@ int main()
 		}
 		else
 		{
-			for (int next = myHand.nextCanCast(self.mana); next >= 0; next = myHand.nextCanCast(self.mana))
+			for (int next = myHand.nextCanCast(self.mana, mySide.size()); next >= 0; next = myHand.nextCanCast(self.mana, mySide.size()))
 			{
 				Card nextCard = myHand.getCard(next);
 				myHand.removeCard(next);
