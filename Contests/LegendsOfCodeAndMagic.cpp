@@ -19,29 +19,6 @@ using namespace std;
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
 
-class Player
-{
-public:
-	int health;
-	int mana;
-	int deck;
-	int rune;
-	bool self;
-
-	void setup (int index, int _health, int _mana, int _deck, int _rune)
-	{
-		self = index == 0;
-		health = _health;
-		mana = _mana;
-		deck = _deck;
-		rune = _rune;
-	}
-	
-	void cast (int cost)
-	{
-		mana -= cost;
-	}
-};
 
 class Card
 {
@@ -429,17 +406,24 @@ public:
 
 class Action
 {
-public:
 	enum class Type { PICK, SUMMON, USE, ATTACK, PASS };
 	Type type;
 	int source;
 	int target;
+	string comment;
 	
+public:
 	Action()
 	{
 		type = Type::PASS;
 		source = NO_TARGET;
 		target = NO_TARGET;
+		comment = "";
+	}
+	
+	bool operator <(const Action& rhs)
+	{
+		return type < rhs.type;
 	}
 	
 	Action& Pick(int choice)
@@ -472,6 +456,11 @@ public:
 		return *this;
 	}
 	
+	Action& Comment(string _comment)
+	{
+		comment = _comment;
+	}
+	
 	friend ostream &operator<<(ostream &os, Action const &m)
 	{
 		switch (m.type)
@@ -493,7 +482,46 @@ public:
 			os << " " << std::to_string(m.target);
 		}
 		
+		if (!m.comment.empty())
+		{
+			os << " " << m.comment;
+		}
+		
 		return os;
+	}
+};
+
+class Player
+{
+public:
+	int health;
+	int mana;
+	int deck;
+	int rune;
+	bool self;
+	Deck hand;
+	Deck field;
+	vector<Action> actions;
+
+	void setup (int index, int _health, int _mana, int _deck, int _rune)
+	{
+		self = index == 0;
+		health = _health;
+		mana = _mana;
+		deck = _deck;
+		rune = _rune;
+	}
+
+	void reset()
+	{
+		hand.clear();
+		field.clear();
+		actions.clear();
+	}
+
+	void cast (int cost)
+	{
+		mana -= cost;
 	}
 };
 
@@ -505,19 +533,13 @@ int main()
 {
 	Player self;
 	Player opponent;
-	Deck myHand;
-	Deck mySide;
-	Deck opponentSide;
-	vector<Action> actions;
 	int draftCounter = 30;
     // game loop
     while (1)
 	{
 		bool drafting = draftCounter > 0;
-		myHand.clear();
-		mySide.clear();
-		opponentSide.clear();
-		actions.clear();
+		self.reset();
+		opponent.reset();
         for (int i = 0; i < 2; i++)
 		{
             int playerHealth;
@@ -557,7 +579,7 @@ int main()
 			{
 				Card thisCard;
 				thisCard.setup(cardNumber, instanceId, location, cardType, cost, attack, defense, abilities, myHealthChange, opponentHealthChange, cardDraw);
-				myHand.putCard(i, std::move(thisCard));
+				self.hand.putCard(i, std::move(thisCard));
 			}
 			else
 			{
@@ -566,13 +588,13 @@ int main()
 				switch (location)
 				{
 					case 0:
-						myHand.putCard(instanceId, std::move(thisCard));
+						self.hand.putCard(instanceId, std::move(thisCard));
 						break;
 					case 1:
-						mySide.putCard(instanceId, std::move(thisCard));
+						self.field.putCard(instanceId, std::move(thisCard));
 						break;
 					case -1:
-						opponentSide.putCard(instanceId, std::move(thisCard));
+						opponent.field.putCard(instanceId, std::move(thisCard));
 						break;
 				}
 			}
@@ -583,25 +605,25 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			actions.push_back(Action().Pick(myHand.bestPick()));
+			self.actions.push_back(Action().Pick(self.hand.bestPick()));
 		}
 		else
 		{
-			for (int next = myHand.nextCanCast(self.mana, mySide.size()); next >= 0; next = myHand.nextCanCast(self.mana, mySide.size()))
+			for (int next = self.hand.nextCanCast(self.mana, self.field.size()); next >= 0; next = self.hand.nextCanCast(self.mana, self.field.size()))
 			{
-				Card nextCard = myHand.getCard(next);
-				myHand.removeCard(next);
+				Card nextCard = self.hand.getCard(next);
+				self.hand.removeCard(next);
 
 				if (nextCard.isCreature)
 				{
-					actions.push_back(Action().Summon(nextCard.instanceId));
+					self.actions.push_back(Action().Summon(nextCard.instanceId));
 
 					self.cast(nextCard.cost);
 					if (!nextCard.charge)
 					{
 						nextCard.hasAttacked = true;
 					}
-					mySide.putCard(nextCard.instanceId, std::move(nextCard));
+					self.field.putCard(nextCard.instanceId, std::move(nextCard));
 				}
 				else
 				{
@@ -611,19 +633,19 @@ int main()
 					{
 						case 1:
 							// Green, for positive for creatures
-							target = mySide.friendToEnchant(nextCard);
+							target = self.field.friendToEnchant(nextCard);
 							if (target >= 0)
 							{
-								mySide.enchant(target, nextCard);
+								self.field.enchant(target, nextCard);
 								use = true;
 							}
 							break;
 						case 2:
 							// Red, for negative for creatures
-							target = opponentSide.enemyToEnchant(nextCard);
+							target = opponent.field.enemyToEnchant(nextCard);
 							if (target >= 0)
 							{
-								opponentSide.enchant(target, nextCard);
+								opponent.field.enchant(target, nextCard);
 								use = true;
 							}
 							break;
@@ -638,23 +660,23 @@ int main()
 						self.health += nextCard.myHealthChange;
 						opponent.health += nextCard.opponentHealthChange;
 						// TODO Modify card draws
-						actions.push_back(Action().Use(nextCard.instanceId, target));
+						self.actions.push_back(Action().Use(nextCard.instanceId, target));
 					}
 				}
 			}
 
 			while (true)
 			{
-				int target = opponentSide.nextTarget();
-				int source = mySide.nextAttacker(opponentSide.cards[target]);
+				int target = opponent.field.nextTarget();
+				int source = self.field.nextAttacker(opponent.field.cards[target]);
 				if (source >= 0)
 				{
 					if (target >= 0)
 					{
-						self.health += opponentSide.damageCard(target, mySide.cards[source]);
+						self.health += opponent.field.damageCard(target, self.field.cards[source]);
 					}
-					mySide.cards[source].hasAttacked = true;
-					actions.push_back(Action().Attack(source, target));
+					self.field.cards[source].hasAttacked = true;
+					self.actions.push_back(Action().Attack(source, target));
 				}
 				else
 				{
@@ -663,14 +685,14 @@ int main()
 			}
 		}
 
-		if (actions.empty())
+		if (self.actions.empty())
 		{
 			cout << Action() << endl;
 		}
 		else
 		{
 			bool first = true;
-			for (auto action : actions)
+			for (auto action : self.actions)
 			{
 				if (!first)
 				{
