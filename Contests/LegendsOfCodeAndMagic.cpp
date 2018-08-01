@@ -402,7 +402,8 @@ public:
 		return power;
 	}
 	
-	int nextCanCast(int mana, int creaturesInPlay) const
+	template <typename Comparator>
+	int nextCanCast(int mana, Comparator compare) const
 	{
 		vector<Card> casts;
 		for (auto it : cards)
@@ -415,7 +416,7 @@ public:
 		
 		if (casts.size() > 0)
 		{
-			sort (casts.begin(), casts.end(), ((creaturesInPlay >= MIN_ENCHANT) ? compareEnchant : ((creaturesInPlay < MAX_CHEAP) ? compareCheap : compareRawWorth)));
+			sort (casts.begin(), casts.end(), compare);
 			for (auto cast : casts)
 			{
 				if (cast.cost <= mana)
@@ -446,7 +447,7 @@ public:
 		comment = "";
 	}
 	
-	bool operator <(const Action& rhs)
+	bool operator<(const Action& rhs)
 	{
 		return type < rhs.type;
 	}
@@ -528,6 +529,46 @@ public:
 	Deck field;
 	vector<Action> actions;
 
+	Player()
+	{
+	}
+
+	Player(const Player &other)
+	{
+		*this = other;
+	}
+
+	Player& operator=(const Player &&other)
+	{
+		health = std::move(other.health);
+		mana = std::move(other.mana);
+		deck = std::move(other.deck);
+		rune = std::move(other.rune);
+		self = std::move(other.self);
+		hand = std::move(other.hand);
+		field = std::move(other.field);
+		actions = std::move(other.actions);
+		return *this;
+	}
+
+	Player& operator=(const Player &other)
+	{
+		health = other.health;
+		mana = other.mana;
+		deck = other.deck;
+		rune = other.rune;
+		self = other.self;
+		hand = other.hand;
+		field = other.field;
+		actions = other.actions;
+		return *this;
+	}
+
+	bool operator<(const Player& rhs)
+	{
+		return score() < rhs.score();
+	}
+
 	void setup (int index, int _health, int _mana, int _deck, int _rune)
 	{
 		self = index == 0;
@@ -554,6 +595,87 @@ public:
 		return health + field.guardHealth() + field.attackPower();
 	}
 };
+
+template <typename Comparator>
+Player simulate(Player sourcePlayer, Player targetPlayer, Comparator compareCast)
+{
+	for (int next = sourcePlayer.hand.nextCanCast(sourcePlayer.mana, compareCast); next >= 0; next = sourcePlayer.hand.nextCanCast(sourcePlayer.mana, compareCast))
+	{
+		Card nextCard = sourcePlayer.hand.getCard(next);
+		sourcePlayer.hand.removeCard(next);
+
+		if (nextCard.isCreature)
+		{
+			sourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId));
+
+			sourcePlayer.cast(nextCard.cost);
+			if (!nextCard.charge)
+			{
+				nextCard.hasAttacked = true;
+			}
+			sourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
+		}
+		else
+		{
+			int target = -1;
+			bool use = false;
+			switch (nextCard.type)
+			{
+				case 1:
+					// Green, for positive for creatures
+					target = sourcePlayer.field.friendToEnchant(nextCard);
+					if (target >= 0)
+					{
+						sourcePlayer.field.enchant(target, nextCard);
+						use = true;
+					}
+					break;
+				case 2:
+					// Red, for negative for creatures
+					target = targetPlayer.field.enemyToEnchant(nextCard);
+					if (target >= 0)
+					{
+						targetPlayer.field.enchant(target, nextCard);
+						use = true;
+					}
+					break;
+				case 3:
+					// Blue, generally use on players
+					use = true;
+					break;
+			}
+
+			if (use)
+			{
+				sourcePlayer.health += nextCard.myHealthChange;
+				targetPlayer.health += nextCard.opponentHealthChange;
+				// TODO Modify card draws
+				sourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target));
+			}
+		}
+	}
+
+	while (true)
+	{
+		int target = targetPlayer.field.nextTarget();
+		int source = sourcePlayer.field.nextAttacker(targetPlayer.field.cards[target]);
+		if (source >= 0)
+		{
+			if (target >= 0)
+			{
+				sourcePlayer.health += targetPlayer.field.damageCard(target, sourcePlayer.field.cards[source]);
+			}
+			sourcePlayer.field.cards[source].hasAttacked = true;
+			sourcePlayer.actions.push_back(Action().Attack(source, target));
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	return sourcePlayer;
+}
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -639,80 +761,13 @@ int main()
 		}
 		else
 		{
-			for (int next = self.hand.nextCanCast(self.mana, self.field.size()); next >= 0; next = self.hand.nextCanCast(self.mana, self.field.size()))
-			{
-				Card nextCard = self.hand.getCard(next);
-				self.hand.removeCard(next);
-
-				if (nextCard.isCreature)
-				{
-					self.actions.push_back(Action().Summon(nextCard.instanceId));
-
-					self.cast(nextCard.cost);
-					if (!nextCard.charge)
-					{
-						nextCard.hasAttacked = true;
-					}
-					self.field.putCard(nextCard.instanceId, std::move(nextCard));
-				}
-				else
-				{
-					int target = -1;
-					bool use = false;
-					switch (nextCard.type)
-					{
-						case 1:
-							// Green, for positive for creatures
-							target = self.field.friendToEnchant(nextCard);
-							if (target >= 0)
-							{
-								self.field.enchant(target, nextCard);
-								use = true;
-							}
-							break;
-						case 2:
-							// Red, for negative for creatures
-							target = opponent.field.enemyToEnchant(nextCard);
-							if (target >= 0)
-							{
-								opponent.field.enchant(target, nextCard);
-								use = true;
-							}
-							break;
-						case 3:
-							// Blue, generally use on players
-							use = true;
-							break;
-					}
-
-					if (use)
-					{
-						self.health += nextCard.myHealthChange;
-						opponent.health += nextCard.opponentHealthChange;
-						// TODO Modify card draws
-						self.actions.push_back(Action().Use(nextCard.instanceId, target));
-					}
-				}
-			}
-
-			while (true)
-			{
-				int target = opponent.field.nextTarget();
-				int source = self.field.nextAttacker(opponent.field.cards[target]);
-				if (source >= 0)
-				{
-					if (target >= 0)
-					{
-						self.health += opponent.field.damageCard(target, self.field.cards[source]);
-					}
-					self.field.cards[source].hasAttacked = true;
-					self.actions.push_back(Action().Attack(source, target));
-				}
-				else
-				{
-					break;
-				}
-			}
+			vector<Player> checkPlayers;
+			checkPlayers.push_back(simulate(self, opponent, compareCheap));
+			checkPlayers.push_back(simulate(self, opponent, compareEnchant));
+			checkPlayers.push_back(simulate(self, opponent, compareRawWorth));
+			// Sort highest score first
+			std::sort(checkPlayers.rbegin(), checkPlayers.rend());
+			self = std::move(checkPlayers[0]);
 		}
 
 		if (self.actions.empty())
