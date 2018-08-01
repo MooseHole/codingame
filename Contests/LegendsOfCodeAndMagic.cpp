@@ -228,9 +228,9 @@ public:
 
 	int firstCard() const
 	{
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			return it->first;
+			return it.first;
 		}
 		
 		return -1;
@@ -238,11 +238,11 @@ public:
 
 	int nextTarget() const
 	{
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			if (it->second.guard && it->second.defense > 0)
+			if (it.second.guard && it.second.defense > 0)
 			{
-				return it->first;
+				return it.first;
 			}
 		}
 		
@@ -253,13 +253,13 @@ public:
 	{
 		int lowestMatch = 10000;
 		int target = -1;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			int match = it->second.abilityMatch(enchantment);
+			int match = it.second.abilityMatch(enchantment);
 			if (lowestMatch > match)
 			{
 				lowestMatch = match;
-				target = it->first;
+				target = it.first;
 			}
 		}
 		
@@ -270,13 +270,13 @@ public:
 	{
 		int highestMatch = -10000;
 		int target = -1;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			int match = it->second.abilityMatch(enchantment);
+			int match = it.second.abilityMatch(enchantment);
 			if (highestMatch < match)
 			{
 				highestMatch = match;
-				target = it->first;
+				target = it.first;
 			}
 		}
 		
@@ -297,11 +297,11 @@ public:
 	{
 		compareTarget = target;
 		vector<Card> attackers;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			if (!it->second.hasAttacked)
+			if (!it.second.hasAttacked)
 			{
-				attackers.push_back(it->second);
+				attackers.push_back(it.second);
 			}
 		}
 		
@@ -349,12 +349,12 @@ public:
 	{
 		int highestWorth = -1000;
 		int bestId = -1;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			if(it->second.rawWorth() > highestWorth)
+			if(it.second.rawWorth() > highestWorth)
 			{
-				bestId = it->first;
-				highestWorth = it->second.rawWorth();
+				bestId = it.first;
+				highestWorth = it.second.rawWorth();
 			}
 		}
 
@@ -365,37 +365,62 @@ public:
 	{
 		int highestWorth = -1000;
 		int bestId = -1;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			if(it->second.rawWorth() > highestWorth)
+			if(it.second.rawWorth() > highestWorth)
 			{
-				bestId = it->first;
-				highestWorth = (12-it->second.cost) + it->second.rawWorth();
+				bestId = it.first;
+				highestWorth = (12-it.second.cost) + it.second.rawWorth();
 			}
 		}
 
 		return bestId;
 	}
 	
+	int guardHealth() const
+	{
+		int guardDefense = 0;
+		for (auto it : cards)
+		{
+			if (!it.second.guard)
+			{
+				guardDefense += it.second.defense;
+			}
+		}
+		
+		return guardDefense;
+	}
+	
+	int attackPower() const
+	{
+		int power = 0;
+		for (auto it : cards)
+		{
+			power += it.second.attack;
+		}
+		
+		return power;
+	}
+	
 	int nextCanCast(int mana, int creaturesInPlay) const
 	{
 		vector<Card> casts;
-		for (auto it = cards.begin(); it != cards.end(); ++it)
+		for (auto it : cards)
 		{
-			if (!it->second.hasAttacked)
+			if (!it.second.hasAttacked)
 			{
-				casts.push_back(it->second);
+				casts.push_back(it.second);
 			}
 		}
 		
 		if (casts.size() > 0)
 		{
 			sort (casts.begin(), casts.end(), ((creaturesInPlay >= MIN_ENCHANT) ? compareEnchant : ((creaturesInPlay < MAX_CHEAP) ? compareCheap : compareRawWorth)));
-			for (auto it = casts.begin(); it != casts.end(); ++it)
+			for (auto cast : casts)
 			{
-				if (it->cost <= mana)
+				if (cast.cost <= mana)
 				{
-					return it->instanceId;
+					return cast.instanceId;
 				}
 			}
 		}
@@ -522,6 +547,11 @@ public:
 	void cast (int cost)
 	{
 		mana -= cost;
+	}
+	
+	int score() const
+	{
+		return health + field.guardHealth() + field.attackPower();
 	}
 };
 
@@ -703,5 +733,7 @@ int main()
 			}
 			cout << endl;
 		}
+		
+		cerr << "My Score: " << self.score() << "  Opponent Score: " << opponent.score() << endl;
     }
 }
