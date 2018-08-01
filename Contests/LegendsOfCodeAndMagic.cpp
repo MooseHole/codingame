@@ -427,29 +427,75 @@ public:
 	}
 };
 
-string appendOutput(string&& currentOutput, string action, int source, int target, string comment="")
+class Action
 {
-	if (!currentOutput.empty())
+public:
+	enum class Type { PICK, SUMMON, USE, ATTACK, PASS };
+	Type type;
+	int source;
+	int target;
+	
+	Action()
 	{
-		currentOutput += ";";
+		type = Type::PASS;
+		source = NO_TARGET;
+		target = NO_TARGET;
 	}
-	currentOutput += action + " " + std::to_string(source);
-	if (target != NO_TARGET)
+	
+	Action& Pick(int choice)
 	{
-		currentOutput += " " + std::to_string(target);
-	}
-	if (!comment.empty())
-	{
-		currentOutput += " " + comment;
+		type = Type::PICK;
+		source = choice;
+		return *this;
 	}
 
-	return (std::move(currentOutput));
-}
+	Action& Summon(int choice)
+	{
+		type = Type::SUMMON;
+		source = choice;
+		return *this;
+	}
+	
+	Action& Use(int choice, int _target)
+	{
+		type = Type::SUMMON;
+		source = choice;
+		target = _target;
+		return *this;
+	}
+	
+	Action& Attack(int _source, int _target)
+	{
+		type = Type::ATTACK;
+		source = _source;
+		target = _target;
+		return *this;
+	}
+	
+	friend ostream &operator<<(ostream &os, Action const &m)
+	{
+		switch (m.type)
+		{
+			case Type::PICK:   os << "PICK";   break;
+			case Type::SUMMON: os << "SUMMON"; break;
+			case Type::USE:    os << "USE";    break;
+			case Type::ATTACK: os << "ATTACK"; break;
+			default:           os << "PASS";   break;
+		}
+		
+		if (m.source != NO_TARGET)
+		{
+			os << " " << std::to_string(m.source);
+		}
 
-string appendOutput(string&& currentOutput, string action, int source, string comment="")
-{
-	return appendOutput(std::move(currentOutput), action, source, NO_TARGET, comment);
-}
+		if (m.target != NO_TARGET)
+		{
+			os << " " << std::to_string(m.target);
+		}
+		
+		return os;
+	}
+};
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -462,6 +508,7 @@ int main()
 	Deck myHand;
 	Deck mySide;
 	Deck opponentSide;
+	vector<Action> actions;
 	int draftCounter = 30;
     // game loop
     while (1)
@@ -470,6 +517,7 @@ int main()
 		myHand.clear();
 		mySide.clear();
 		opponentSide.clear();
+		actions.clear();
         for (int i = 0; i < 2; i++)
 		{
             int playerHealth;
@@ -535,7 +583,7 @@ int main()
 		string turnOutput = "";
 		if (drafting)
 		{
-			turnOutput = appendOutput(std::move(turnOutput), "PICK", myHand.bestPick());
+			actions.push_back(Action().Pick(myHand.bestPick()));
 		}
 		else
 		{
@@ -546,7 +594,7 @@ int main()
 
 				if (nextCard.isCreature)
 				{
-					turnOutput = appendOutput(std::move(turnOutput), "SUMMON", nextCard.instanceId);
+					actions.push_back(Action().Summon(nextCard.instanceId));
 
 					self.cast(nextCard.cost);
 					if (!nextCard.charge)
@@ -590,7 +638,7 @@ int main()
 						self.health += nextCard.myHealthChange;
 						opponent.health += nextCard.opponentHealthChange;
 						// TODO Modify card draws
-						turnOutput = appendOutput(std::move(turnOutput), "USE", nextCard.instanceId, target);
+						actions.push_back(Action().Use(nextCard.instanceId, target));
 					}
 				}
 			}
@@ -606,7 +654,7 @@ int main()
 						self.health += opponentSide.damageCard(target, mySide.cards[source]);
 					}
 					mySide.cards[source].hasAttacked = true;
-					turnOutput = appendOutput(std::move(turnOutput), "ATTACK", source, target);
+					actions.push_back(Action().Attack(source, target));
 				}
 				else
 				{
@@ -614,14 +662,24 @@ int main()
 				}
 			}
 		}
-			
-		if (turnOutput.empty())
+
+		if (actions.empty())
 		{
-			cout << "PASS" << endl;
+			cout << Action() << endl;
 		}
 		else
 		{
-			cout << turnOutput << endl;
+			bool first = true;
+			for (auto action : actions)
+			{
+				if (!first)
+				{
+					cout << ";";
+				}
+				first = false;
+				cout << action;
+			}
+			cout << endl;
 		}
     }
 }
