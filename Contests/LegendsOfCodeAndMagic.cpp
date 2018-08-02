@@ -395,9 +395,13 @@ public:
 		int guardDefense = 0;
 		for (auto it : cards)
 		{
-			if (!it.second.guard)
+			if (it.second.guard)
 			{
 				guardDefense += it.second.defense;
+				if (it.second.ward)
+				{
+					guardDefense += 1;
+				}
 			}
 		}
 		
@@ -700,18 +704,18 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		}
 	}
 
-	bool anyGuard = targetPlayer.field.anyGuard();
-	vector<int> cardsThatCanDefend;
-	for (auto it : targetPlayer.field.cards)
-	{
-		if (!anyGuard || it.second.guard)
-		{
-			cardsThatCanDefend.push_back(it.first);
-		}
-	}
-
 	for (auto attacker : cardsThatCanAttack)
 	{
+		bool anyGuard = targetPlayer.field.anyGuard();
+		vector<int> cardsThatCanDefend;
+		for (auto it : targetPlayer.field.cards)
+		{
+			if (!anyGuard || it.second.guard)
+			{
+				cardsThatCanDefend.push_back(it.first);
+			}
+		}
+
 		Player bestSourcePlayer = sourcePlayer;
 		Player bestTargetPlayer = targetPlayer;
 
