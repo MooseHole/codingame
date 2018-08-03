@@ -383,10 +383,11 @@ public:
 		int bestId = -1;
 		for (auto it : cards)
 		{
-			if(it.second.rawWorth() > highestWorth)
+			int thisWorth = (12-it.second.cost) + it.second.rawWorth();
+			if(thisWorth > highestWorth)
 			{
 				bestId = it.first;
-				highestWorth = (12-it.second.cost) + it.second.rawWorth();
+				highestWorth = thisWorth;
 			}
 		}
 
