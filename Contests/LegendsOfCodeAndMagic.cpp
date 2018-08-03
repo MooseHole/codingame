@@ -42,6 +42,7 @@ public:
 	bool ward;
 	bool isCreature;
 	bool hasAttacked;
+	bool exclude;
 
 	Card()
 	{
@@ -73,6 +74,7 @@ public:
 		ward = std::move(other.ward);
 		isCreature = std::move(other.isCreature);
 		hasAttacked = std::move(other.hasAttacked);
+		exclude = std::move(other.exclude);
 		return *this;
 	}
 
@@ -97,6 +99,7 @@ public:
 		ward = other.ward;
 		isCreature = other.isCreature;
 		hasAttacked = other.hasAttacked;
+		exclude = other.exclude;
 		return *this;
 	}
 
@@ -121,6 +124,7 @@ public:
 		ward = _abilities[5] == 'W';
 		isCreature = _type == 0;
 		hasAttacked = false;
+		exclude = false;
 	}
 	
 	int rawWorth() const
@@ -615,12 +619,13 @@ public:
 
 Player simulate(Player sourcePlayer, Player targetPlayer)
 {
+	// Find cards to use/summon
 	while (true)
 	{
 		vector<int> cardsInHand;
 		for (auto it : sourcePlayer.hand.cards)
 		{
-			if (it.second.cost <= sourcePlayer.mana)
+			if (!it.second.exclude && it.second.cost <= sourcePlayer.mana)
 			{
 				cardsInHand.push_back(it.first);
 			}
@@ -685,6 +690,11 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 					// TODO Modify card draws
 					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target));
 				}
+				else
+				{
+					testSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
+					bestSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
+				}
 			}
 			
 			if (bestSourcePlayer.score() < testSourcePlayer.score())
@@ -695,6 +705,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		sourcePlayer = std::move(bestSourcePlayer);
 	}
 
+	// Find cards to attack with
 	vector<int> cardsThatCanAttack;
 	for (auto it : sourcePlayer.field.cards)
 	{
