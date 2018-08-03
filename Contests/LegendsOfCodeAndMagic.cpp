@@ -649,13 +649,13 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		
 		Player bestSourcePlayer = sourcePlayer;
 		Player bestTargetPlayer = targetPlayer;
+		bool first = true;
 		for (auto cardId : cardsInHand)
 		{
 			Player testSourcePlayer = sourcePlayer;
 			Player testTargetPlayer = targetPlayer;
 			Card nextCard = testSourcePlayer.hand.getCard(cardId);
 			testSourcePlayer.hand.removeCard(cardId);
-			cerr << "use/summon " << nextCard << endl;
 
 			if (nextCard.isCreature)
 			{
@@ -712,8 +712,9 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				}
 			}
 			
-			if (bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+			if (first || bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
 			{
+				first = false;
 				bestSourcePlayer = std::move(testSourcePlayer);
 				bestTargetPlayer = std::move(testTargetPlayer);
 			}
@@ -734,8 +735,6 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 	for (auto attacker : cardsThatCanAttack)
 	{
-		cerr << "attack " << attacker << endl;
-
 		bool anyGuard = targetPlayer.field.anyGuard();
 		vector<int> cardsThatCanDefend;
 		for (auto it : targetPlayer.field.cards)
@@ -767,7 +766,6 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 		for (auto defender : cardsThatCanDefend)
 		{
-			cerr << "defend " << defender << endl;
 			Player testSourcePlayer = sourcePlayer;
 			Player testTargetPlayer = targetPlayer;
 			
