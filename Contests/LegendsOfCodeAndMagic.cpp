@@ -146,6 +146,18 @@ public:
 			 + ((lethal       && compare.lethal)       ? 1 : 0)
 			 + ((ward         && compare.ward)         ? 1 : 0);
 	}
+	
+	friend ostream &operator<<(ostream &os, Card const &m)
+	{
+		os << "Card: n" << m.number << " i" << m.instanceId << " l" << m.location << " t" << m.type << " $" << m.cost;
+		os << " a" << m.attack << " d" << m.defense << " m" << m.myHealthChange << " o" << m.opponentHealthChange;
+		os << " d" << m.cardDraw;
+		os << " " << (m.breakthrough ? "B" : "-") << (m.charge ? "C" : "-") << (m.drain ? "D" : "-") << (m.guard ? "G" : "-") << (m.lethal ? "L" : "-") << (m.ward ? "W" : "-");
+		os << " " << (m.isCreature ? "creature" : "enchantment");
+		os << " " << (m.hasAttacked ? "has attacked" : "has not attacked");
+		os << " " << (m.exclude ? "exclude" : "include");
+		return os;
+	}
 };
 
 
@@ -636,11 +648,14 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		}
 		
 		Player bestSourcePlayer = sourcePlayer;
+		Player bestTargetPlayer = targetPlayer;
 		for (auto cardId : cardsInHand)
 		{
 			Player testSourcePlayer = sourcePlayer;
+			Player testTargetPlayer = targetPlayer;
 			Card nextCard = testSourcePlayer.hand.getCard(cardId);
 			testSourcePlayer.hand.removeCard(cardId);
+			cerr << "use/summon " << nextCard << endl;
 
 			if (nextCard.isCreature)
 			{
@@ -670,10 +685,10 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 						break;
 					case 2:
 						// Red, for negative for creatures
-						target = targetPlayer.field.enemyToEnchant(nextCard);
+						target = testTargetPlayer.field.enemyToEnchant(nextCard);
 						if (target >= 0)
 						{
-							targetPlayer.field.enchant(target, nextCard);
+							testTargetPlayer.field.enchant(target, nextCard);
 							use = true;
 						}
 						break;
@@ -686,7 +701,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				if (use)
 				{
 					testSourcePlayer.health += nextCard.myHealthChange;
-					targetPlayer.health += nextCard.opponentHealthChange;
+					testTargetPlayer.health += nextCard.opponentHealthChange;
 					// TODO Modify card draws
 					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target));
 				}
@@ -697,12 +712,14 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				}
 			}
 			
-			if (bestSourcePlayer.score() < testSourcePlayer.score())
+			if (bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
 			{
 				bestSourcePlayer = std::move(testSourcePlayer);
+				bestTargetPlayer = std::move(testTargetPlayer);
 			}
 		}
 		sourcePlayer = std::move(bestSourcePlayer);
+		targetPlayer = std::move(bestTargetPlayer);
 	}
 
 	// Find cards to attack with
@@ -717,6 +734,8 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 	for (auto attacker : cardsThatCanAttack)
 	{
+		cerr << "attack " << attacker << endl;
+
 		bool anyGuard = targetPlayer.field.anyGuard();
 		vector<int> cardsThatCanDefend;
 		for (auto it : targetPlayer.field.cards)
@@ -748,6 +767,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 		for (auto defender : cardsThatCanDefend)
 		{
+			cerr << "defend " << defender << endl;
 			Player testSourcePlayer = sourcePlayer;
 			Player testTargetPlayer = targetPlayer;
 			
