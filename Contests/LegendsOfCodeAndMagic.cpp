@@ -7,6 +7,7 @@
 using namespace std;
 #define MAX_CHEAP 2
 #define MIN_ENCHANT 3
+#define BUCKET_MAX 3
 #define NO_TARGET -10000
 #define LETHAL_SCORE 10
 #define ATTACK_SCORE 2
@@ -18,7 +19,6 @@ using namespace std;
 #define HEAL_ME_SCORE 2
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
-
 
 class Card
 {
@@ -378,7 +378,7 @@ public:
 		return bestId;
 	}
 	
-	int bestPick()
+	int bestPick(string& comment)
 	{
 		int highestWorth = -1000000;
 		int bestId = -1;
@@ -387,7 +387,7 @@ public:
 		{
 			int thisCost = it.second.cost;
 			thisCost = thisCost > 7 ? 7 : thisCost;
-			int thisWorth = (buckets[thisCost] >= 3 ? -1000 : 0) + it.second.rawWorth();
+			int thisWorth = (buckets[thisCost] >= BUCKET_MAX ? -1000 : 0) + it.second.rawWorth();
 			if(thisWorth > highestWorth)
 			{
 				bestId = it.first;
@@ -396,6 +396,11 @@ public:
 			}
 		}
 		
+		if (buckets[bestCost] >= BUCKET_MAX)
+		{
+			comment += "Lots of " + (bestCost >= 7 ? "7+" : std::to_string(bestCost)) + "s.";
+		}
+
 		buckets[bestCost]++;
 		return bestId;
 	}
@@ -525,6 +530,7 @@ public:
 	Action& Comment(string _comment)
 	{
 		comment = _comment;
+		return *this;
 	}
 	
 	friend ostream &operator<<(ostream &os, Action const &m)
@@ -630,6 +636,12 @@ public:
 		mana -= cost;
 	}
 	
+	void pick()
+	{
+		string comment;
+		actions.push_back(Action().Pick(hand.bestPick(comment)).Comment(comment));
+	}
+	
 	int score() const
 	{
 		return health + field.guardHealth() + field.attackPower();
@@ -666,7 +678,16 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 			if (nextCard.isCreature)
 			{
-				testSourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId));
+				string comment = "";
+				if (nextCard.guard)
+				{
+					comment = "This should keep me safe.";
+				}
+				else if (nextCard.attack >= 5)
+				{
+					comment = "Check out this puppy.";
+				}
+				testSourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId).Comment(comment));
 
 				testSourcePlayer.cast(nextCard.cost);
 				if (!nextCard.charge)
@@ -679,6 +700,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			{
 				int target = -1;
 				bool use = false;
+				string comment = "";
 				switch (nextCard.type)
 				{
 					case 1:
@@ -686,6 +708,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 						target = testSourcePlayer.field.friendToEnchant(nextCard);
 						if (target >= 0)
 						{
+							comment = "Power up!";
 							testSourcePlayer.field.enchant(target, nextCard);
 							use = true;
 						}
@@ -695,12 +718,14 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 						target = testTargetPlayer.field.enemyToEnchant(nextCard);
 						if (target >= 0)
 						{
+							comment = "Muahahaha";
 							testTargetPlayer.field.enchant(target, nextCard);
 							use = true;
 						}
 						break;
 					case 3:
 						// Blue, generally use on players
+						comment = "Bwoop";
 						use = true;
 						break;
 				}
@@ -710,7 +735,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 					testSourcePlayer.health += nextCard.myHealthChange;
 					testTargetPlayer.health += nextCard.opponentHealthChange;
 					// TODO Modify card draws
-					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target));
+					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target).Comment(comment));
 				}
 				else
 				{
@@ -761,7 +786,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			Player testTargetPlayer = targetPlayer;
 			testTargetPlayer.health -= testSourcePlayer.field.cards[attacker].attack;
 			testSourcePlayer.field.cards[attacker].hasAttacked = true;
-			testSourcePlayer.actions.push_back(Action().Attack(attacker, -1));
+			testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
 
 			if (!testSourcePlayer.field.cards[attacker].hasAttacked
 			 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
@@ -778,7 +803,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			
 			testSourcePlayer.health += testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]);
 			testSourcePlayer.field.cards[attacker].hasAttacked = true;
-			testSourcePlayer.actions.push_back(Action().Attack(attacker, defender));
+			testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
 
 			if (!testSourcePlayer.field.cards[attacker].hasAttacked
 			 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
@@ -868,14 +893,13 @@ int main()
 						break;
 				}
 			}
-			int key = drafting ? i : instanceId;
         }
 		draftCounter--;
 		
 		string turnOutput = "";
 		if (drafting)
 		{
-			self.actions.push_back(Action().Pick(self.hand.bestPick()));
+			self.pick();
 		}
 		else
 		{
