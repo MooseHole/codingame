@@ -16,6 +16,7 @@ using namespace std;
 #define DRAIN_SCORE 2
 #define GUARD_SCORE 3
 #define GUARD_AND_WARD_SCORE 5
+#define WARD_SCORE 2
 #define HEAL_ME_SCORE 2
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
@@ -129,12 +130,48 @@ public:
 	
 	int rawWorth() const
 	{
-		return (lethal ? LETHAL_SCORE : 0)
-			 + (attack*ATTACK_SCORE*(breakthrough ? BREAKTHROUGH_SCORE : 1)*(charge ? CHARGE_SCORE : 1)*(drain ? DRAIN_SCORE : 1))
-			 + (defense*(guard ? (ward ? GUARD_AND_WARD_SCORE : GUARD_SCORE) : 1))
-			 + myHealthChange * HEAL_ME_SCORE
-			 - opponentHealthChange * DAMAGE_THEM_SCORE
-			 + (cardDraw*DRAW_SCORE);
+		if (isCreature)
+		{
+			return (lethal ? LETHAL_SCORE : 0)
+				 + (attack*ATTACK_SCORE*(breakthrough ? BREAKTHROUGH_SCORE : 1)*(charge ? CHARGE_SCORE : 1)*(drain ? DRAIN_SCORE : 1))
+				 + (defense*(guard ? (ward ? GUARD_AND_WARD_SCORE : GUARD_SCORE) : 1))
+				 + myHealthChange * HEAL_ME_SCORE
+				 - opponentHealthChange * DAMAGE_THEM_SCORE
+				 + (cardDraw*DRAW_SCORE);
+		}
+		
+		switch (type)
+		{
+			case 2:
+				// Red, for negative for creatures
+				return (lethal ? LETHAL_SCORE : 0)
+					 - (attack*ATTACK_SCORE)
+					 - (defense)
+					 + (breakthrough ? BREAKTHROUGH_SCORE : 0)
+					 + (charge ? CHARGE_SCORE : 0)
+					 + (drain ? DRAIN_SCORE : 0)
+					 + (guard ? GUARD_SCORE : 0)
+					 + (ward ? WARD_SCORE : 0)
+					 + (myHealthChange*HEAL_ME_SCORE)
+					 - (opponentHealthChange*DAMAGE_THEM_SCORE)
+					 + (cardDraw*DRAW_SCORE);
+				break;
+			default:
+				// Green, for positive for creatures
+				// Blue, generally use on players
+				return (lethal ? LETHAL_SCORE : 0)
+					 + (attack*ATTACK_SCORE)
+					 + (defense)
+					 + (breakthrough ? BREAKTHROUGH_SCORE : 0)
+					 + (charge ? CHARGE_SCORE : 0)
+					 + (drain ? DRAIN_SCORE : 0)
+					 + (guard ? GUARD_SCORE : 0)
+					 + (ward ? WARD_SCORE : 0)
+					 + (myHealthChange*HEAL_ME_SCORE)
+					 - (opponentHealthChange*DAMAGE_THEM_SCORE)
+					 + (cardDraw*DRAW_SCORE);
+				break;
+		}
 	}
 	
 	int abilityMatch(Card compare) const
