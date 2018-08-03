@@ -202,6 +202,7 @@ class Deck
 {
 public:
 	map<int, Card> cards;
+	map<int, int> buckets;
 
 	void clear()
 	{
@@ -377,20 +378,25 @@ public:
 		return bestId;
 	}
 	
-	int bestPick() const
+	int bestPick()
 	{
-		int highestWorth = -1000;
+		int highestWorth = -1000000;
 		int bestId = -1;
+		int bestCost = -1;
 		for (auto it : cards)
 		{
-			int thisWorth = (12-it.second.cost) + it.second.rawWorth();
+			int thisCost = it.second.cost;
+			thisCost = thisCost > 7 ? 7 : thisCost;
+			int thisWorth = (buckets[thisCost] >= 3 ? -1000 : 0) + it.second.rawWorth();
 			if(thisWorth > highestWorth)
 			{
 				bestId = it.first;
 				highestWorth = thisWorth;
+				bestCost = thisCost;
 			}
 		}
-
+		
+		buckets[bestCost]++;
 		return bestId;
 	}
 	
