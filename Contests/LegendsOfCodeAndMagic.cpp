@@ -792,61 +792,72 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		targetPlayer = std::move(bestTargetPlayer);
 	}
 
-	// Find cards to attack with
-	vector<int> cardsThatCanAttack;
-	for (auto it : sourcePlayer.field.cards)
+	int previousNumberOfCardsThatCanAttack = -1;
+	while (true)
 	{
-		if (!it.second.hasAttacked)
+		// Find cards to attack with
+		vector<int> cardsThatCanAttack;
+		for (auto it : sourcePlayer.field.cards)
 		{
-			cardsThatCanAttack.push_back(it.first);
-		}
-	}
-
-	for (auto attacker : cardsThatCanAttack)
-	{
-		bool anyGuard = targetPlayer.field.anyGuard();
-		vector<int> cardsThatCanDefend;
-		for (auto it : targetPlayer.field.cards)
-		{
-			if (!anyGuard || it.second.guard)
+			if (!it.second.hasAttacked)
 			{
-				cardsThatCanDefend.push_back(it.first);
+				cardsThatCanAttack.push_back(it.first);
 			}
 		}
+		
+		int numberOfCardsThatCanAttack = cardsThatCanAttack.size();
+		if (numberOfCardsThatCanAttack == 0 || numberOfCardsThatCanAttack == previousNumberOfCardsThatCanAttack)
+		{
+			break;
+		}
+		previousNumberOfCardsThatCanAttack = numberOfCardsThatCanAttack;
 
 		Player bestSourcePlayer = sourcePlayer;
 		Player bestTargetPlayer = targetPlayer;
 
-		if (!anyGuard)
+		for (auto attacker : cardsThatCanAttack)
 		{
-			Player testSourcePlayer = sourcePlayer;
-			Player testTargetPlayer = targetPlayer;
-			testTargetPlayer.health -= testSourcePlayer.field.cards[attacker].attack;
-			testSourcePlayer.field.cards[attacker].hasAttacked = true;
-			testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
-
-			if (!testSourcePlayer.field.cards[attacker].hasAttacked
-			 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+			bool anyGuard = targetPlayer.field.anyGuard();
+			vector<int> cardsThatCanDefend;
+			for (auto it : targetPlayer.field.cards)
 			{
-				bestSourcePlayer = std::move(testSourcePlayer);
-				bestTargetPlayer = std::move(testTargetPlayer);
+				if (!anyGuard || it.second.guard)
+				{
+					cardsThatCanDefend.push_back(it.first);
+				}
 			}
-		}
 
-		for (auto defender : cardsThatCanDefend)
-		{
-			Player testSourcePlayer = sourcePlayer;
-			Player testTargetPlayer = targetPlayer;
-			
-			testSourcePlayer.health += testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]);
-			testSourcePlayer.field.cards[attacker].hasAttacked = true;
-			testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
-
-			if (!testSourcePlayer.field.cards[attacker].hasAttacked
-			 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+			if (!anyGuard)
 			{
-				bestSourcePlayer = std::move(testSourcePlayer);
-				bestTargetPlayer = std::move(testTargetPlayer);
+				Player testSourcePlayer = sourcePlayer;
+				Player testTargetPlayer = targetPlayer;
+				testTargetPlayer.health -= testSourcePlayer.field.cards[attacker].attack;
+				testSourcePlayer.field.cards[attacker].hasAttacked = true;
+				testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
+
+				if (!testSourcePlayer.field.cards[attacker].hasAttacked
+				 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+				{
+					bestSourcePlayer = std::move(testSourcePlayer);
+					bestTargetPlayer = std::move(testTargetPlayer);
+				}
+			}
+
+			for (auto defender : cardsThatCanDefend)
+			{
+				Player testSourcePlayer = sourcePlayer;
+				Player testTargetPlayer = targetPlayer;
+				
+				testSourcePlayer.health += testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]);
+				testSourcePlayer.field.cards[attacker].hasAttacked = true;
+				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
+
+				if (!testSourcePlayer.field.cards[attacker].hasAttacked
+				 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+				{
+					bestSourcePlayer = std::move(testSourcePlayer);
+					bestTargetPlayer = std::move(testTargetPlayer);
+				}
 			}
 		}
 
