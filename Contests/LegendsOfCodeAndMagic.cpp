@@ -21,6 +21,8 @@ using namespace std;
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
 #define PLAYER_HEALTH_SCORE 100
+#define PLAYER_GUARD_SCORE 100
+#define PLAYER_ATTACK_SCORE 100
 #define PLAYER_DRAW_SCORE 1
 
 class Card
@@ -618,6 +620,11 @@ public:
 
 	Player()
 	{
+		runes[25] = true;
+		runes[20] = true;
+		runes[15] = true;
+		runes[10] = true;
+		runes[5] = true;
 	}
 
 	Player(const Player &other)
@@ -667,11 +674,6 @@ public:
 		mana = _mana;
 		deck = _deck;
 		rune = _rune;
-		runes[25] = true;
-		runes[20] = true;
-		runes[15] = true;
-		runes[10] = true;
-		runes[5] = true;
 		draws = 1;
 	}
 
@@ -695,7 +697,7 @@ public:
 	
 	int score() const
 	{
-		return PLAYER_HEALTH_SCORE*(health + field.guardHealth() + field.attackPower()) + PLAYER_DRAW_SCORE*draws;
+		return PLAYER_HEALTH_SCORE*health + PLAYER_GUARD_SCORE*field.guardHealth() + PLAYER_ATTACK_SCORE*field.attackPower() + PLAYER_DRAW_SCORE*draws;
 	}
 	
 	void healthChange(int amount)
@@ -890,7 +892,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				Player testTargetPlayer = targetPlayer;
 
 				testSourcePlayer.healthChange(testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]));
-				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
+//				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
 
