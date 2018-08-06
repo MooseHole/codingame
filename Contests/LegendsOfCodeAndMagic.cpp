@@ -8,6 +8,8 @@ using namespace std;
 #define MAX_CHEAP 2
 #define MIN_ENCHANT 3
 #define BUCKET_MAX 3
+#define MAX_HAND_CARDS 8
+#define MAX_FIELD_CARDS 6
 #define NO_TARGET -10000
 #define LETHAL_SCORE 10
 #define ATTACK_SCORE 2
@@ -450,7 +452,7 @@ public:
 	{
 		for (auto it : cards)
 		{
-			if (it.second.guard)
+			if (it.second.guard && it.second.isCreature)
 			{
 				return true;
 			}
@@ -616,15 +618,9 @@ public:
 	Deck field;
 	vector<Action> actions;
 	int draws;
-	map<int, bool> runes;
 
 	Player()
 	{
-		runes[25] = true;
-		runes[20] = true;
-		runes[15] = true;
-		runes[10] = true;
-		runes[5] = true;
 	}
 
 	Player(const Player &other)
@@ -642,7 +638,6 @@ public:
 		hand = std::move(other.hand);
 		field = std::move(other.field);
 		actions = std::move(other.actions);
-		runes = std::move(other.runes);
 		draws = std::move(other.draws);
 		return *this;
 	}
@@ -657,7 +652,6 @@ public:
 		hand = other.hand;
 		field = other.field;
 		actions = other.actions;
-		runes = other.runes;
 		draws = other.draws;
 		return *this;
 	}
@@ -682,6 +676,7 @@ public:
 		hand.clear();
 		field.clear();
 		actions.clear();
+		draws = 1;
 	}
 
 	void cast (int cost)
@@ -697,29 +692,38 @@ public:
 	
 	int score() const
 	{
-		return PLAYER_HEALTH_SCORE*health + PLAYER_GUARD_SCORE*field.guardHealth() + PLAYER_ATTACK_SCORE*field.attackPower() + PLAYER_DRAW_SCORE*draws;
+		return PLAYER_HEALTH_SCORE*health
+			 + PLAYER_GUARD_SCORE*field.guardHealth()
+			 + PLAYER_ATTACK_SCORE*field.attackPower()
+			 + PLAYER_DRAW_SCORE*draws
+			 + (deck < draws ? -100000 : 0)
+			 + (health <= 0 ? -100000: 0);
 	}
 	
 	void healthChange(int amount)
 	{
-		int begin = health;
-		int end = health - amount;
-		
-		health = end;
-		for (auto thisRune : runes)
-		{
-			if (thisRune.first <= begin && thisRune.first > end)
-			{
-				thisRune.second = false;
-				drawsChange(1);
-			}
-		}
+		health -= amount;
+		updateRunes();
+	}
+	
+	void updateRunes()
+	{
+		if (rune > 5 && health < 25) drawsChange(1);
+		if (rune > 4 && health < 20) drawsChange(1);
+		if (rune > 3 && health < 15) drawsChange(1);
+		if (rune > 2 && health < 10) drawsChange(1);
+		if (rune > 1 && health <  5) drawsChange(1);
 	}
 
 	void drawsChange(int amount)
 	{
 		draws += amount;
-		int availableDraws = 8 - hand.size();
+		updateDraws();
+	}
+	
+	void updateDraws()
+	{
+		int availableDraws = MAX_HAND_CARDS - hand.size();
 		if (draws > availableDraws)
 		{
 			draws = availableDraws;
@@ -755,7 +759,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			Card nextCard = testSourcePlayer.hand.getCard(cardId);
 			testSourcePlayer.hand.removeCard(cardId);
 
-			if (nextCard.isCreature)
+			if (nextCard.isCreature && testSourcePlayer.field.size() < MAX_FIELD_CARDS)
 			{
 				string comment = "";
 				if (nextCard.guard)
@@ -843,7 +847,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		vector<int> cardsThatCanAttack;
 		for (auto it : sourcePlayer.field.cards)
 		{
-			if (!it.second.hasAttacked)
+			if (it.second.isCreature && !it.second.hasAttacked)
 			{
 				cardsThatCanAttack.push_back(it.first);
 			}
@@ -865,7 +869,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			vector<int> cardsThatCanDefend;
 			for (auto it : targetPlayer.field.cards)
 			{
-				if (!anyGuard || it.second.guard)
+				if (!anyGuard || (it.second.isCreature && it.second.guard))
 				{
 					cardsThatCanDefend.push_back(it.first);
 				}
@@ -875,7 +879,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			{
 				Player testSourcePlayer = sourcePlayer;
 				Player testTargetPlayer = targetPlayer;
-				testTargetPlayer.healthChange(-testSourcePlayer.field.cards[attacker].attack);
+				testTargetPlayer.healthChange(testSourcePlayer.field.cards[attacker].attack);
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
 
@@ -988,6 +992,8 @@ int main()
 			}
         }
 		draftCounter--;
+		self.updateDraws();
+		opponent.updateDraws();
 		
 		string turnOutput = "";
 		if (drafting)
