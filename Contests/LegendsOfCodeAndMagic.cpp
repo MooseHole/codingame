@@ -24,7 +24,7 @@ using namespace std;
 #define DRAW_SCORE 5
 #define PLAYER_HEALTH_SCORE 100
 #define PLAYER_GUARD_SCORE 100
-#define PLAYER_ATTACK_SCORE 10
+#define PLAYER_ATTACK_SCORE 100
 #define PLAYER_DRAW_SCORE 1
 
 class Card
@@ -374,22 +374,41 @@ public:
 		return -1;
 	}
 	
-	int damageCard(int instanceId, Card attacker)
+	void damageCard(int instanceId, Card attacker, int& attackerHealthChange, int& defenderHealthChange)
 	{
 		int totalDamage = 0;
+		attackerHealthChange = 0;
+		defenderHealthChange = 0;
 		if (cards[instanceId].ward)
 		{
 			cards[instanceId].ward = false;
 		}
-		else if (attacker.lethal)
-		{
-			totalDamage = cards[instanceId].defense;
-			cards[instanceId].defense = 0;
-		}
 		else
 		{
-			totalDamage = std::min(cards[instanceId].defense, attacker.attack);
-			cards[instanceId].defense -= attacker.attack;
+			if (attacker.lethal && attacker.breakthrough)
+			{
+				cards[instanceId].defense = 0;
+				defenderHealthChange = attacker.attack;
+			}
+			else if (attacker.lethal)
+			{
+				totalDamage = cards[instanceId].defense;
+				cards[instanceId].defense = 0;
+			}
+			else if (attacker.breakthrough)
+			{
+				totalDamage = attacker.attack;
+				cards[instanceId].defense -= attacker.attack;
+				if (cards[instanceId].defense < 0)
+				{
+					defenderHealthChange = cards[instanceId].defense;
+				}
+			}
+			else
+			{
+				totalDamage = std::min(cards[instanceId].defense, attacker.attack);
+				cards[instanceId].defense -= attacker.attack;
+			}
 		}
 		
 		if (cards[instanceId].defense <= 0)
@@ -399,10 +418,8 @@ public:
 		
 		if (attacker.drain)
 		{
-			return totalDamage;
+			attackerHealthChange = std::max(cards[instanceId].defense - attacker.attack, 0);
 		}
-
-		return 0;
 	}
 	
 	int highestWorth() const
@@ -898,8 +915,13 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				Player testSourcePlayer = sourcePlayer;
 				Player testTargetPlayer = targetPlayer;
 
-				testSourcePlayer.healthChange(testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]));
-				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
+				int attackerHealthChange;
+				int defenderHealthChange;
+				testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker], attackerHealthChange, defenderHealthChange);
+				// Health changes only occur for the attacker
+				testSourcePlayer.healthChange(attackerHealthChange);
+				testTargetPlayer.healthChange(defenderHealthChange);
+				testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender], attackerHealthChange, defenderHealthChange);
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
 
