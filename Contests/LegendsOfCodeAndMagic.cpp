@@ -22,9 +22,9 @@ using namespace std;
 #define HEAL_ME_SCORE 2
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
-#define PLAYER_HEALTH_SCORE 100
-#define PLAYER_GUARD_SCORE 100
-#define PLAYER_ATTACK_SCORE 100
+#define PLAYER_HEALTH_SCORE 1000
+#define PLAYER_GUARD_SCORE 10
+#define PLAYER_ATTACK_SCORE 10
 #define PLAYER_DRAW_SCORE 1
 
 class Card
@@ -488,7 +488,7 @@ public:
 				guardDefense += it.second.defense;
 				if (it.second.ward)
 				{
-					guardDefense += 1;
+					guardDefense += GUARD_AND_WARD_SCORE;
 				}
 			}
 		}
@@ -502,6 +502,9 @@ public:
 		for (auto it : cards)
 		{
 			power += it.second.attack;
+			power += (it.second.lethal ? LETHAL_SCORE : 0);
+			power += (it.second.breakthrough ? BREAKTHROUGH_SCORE : 0);
+			power += (it.second.drain ? DRAIN_SCORE : 0);
 		}
 		
 		return power;
