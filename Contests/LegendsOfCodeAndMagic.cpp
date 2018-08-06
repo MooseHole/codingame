@@ -418,7 +418,7 @@ public:
 		
 		if (attacker.drain)
 		{
-			attackerHealthChange = std::max(cards[instanceId].defense - attacker.attack, 0);
+			attackerHealthChange = totalDamage;
 		}
 	}
 	
