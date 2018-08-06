@@ -24,7 +24,7 @@ using namespace std;
 #define DRAW_SCORE 5
 #define PLAYER_HEALTH_SCORE 100
 #define PLAYER_GUARD_SCORE 100
-#define PLAYER_ATTACK_SCORE 100
+#define PLAYER_ATTACK_SCORE 10
 #define PLAYER_DRAW_SCORE 1
 
 class Card
@@ -774,6 +774,8 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 				testSourcePlayer.cast(nextCard.cost);
 				testSourcePlayer.drawsChange(nextCard.cardDraw);
+				testSourcePlayer.healthChange(nextCard.myHealthChange);
+				testTargetPlayer.healthChange(nextCard.opponentHealthChange);
 
 				if (!nextCard.charge)
 				{
