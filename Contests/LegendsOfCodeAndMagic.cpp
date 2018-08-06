@@ -20,6 +20,8 @@ using namespace std;
 #define HEAL_ME_SCORE 2
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
+#define PLAYER_HEALTH_SCORE 100
+#define PLAYER_DRAW_SCORE 1
 
 class Card
 {
@@ -611,6 +613,8 @@ public:
 	Deck hand;
 	Deck field;
 	vector<Action> actions;
+	int draws;
+	map<int, bool> runes;
 
 	Player()
 	{
@@ -631,6 +635,8 @@ public:
 		hand = std::move(other.hand);
 		field = std::move(other.field);
 		actions = std::move(other.actions);
+		runes = std::move(other.runes);
+		draws = std::move(other.draws);
 		return *this;
 	}
 
@@ -644,6 +650,8 @@ public:
 		hand = other.hand;
 		field = other.field;
 		actions = other.actions;
+		runes = other.runes;
+		draws = other.draws;
 		return *this;
 	}
 
@@ -659,6 +667,12 @@ public:
 		mana = _mana;
 		deck = _deck;
 		rune = _rune;
+		runes[25] = true;
+		runes[20] = true;
+		runes[15] = true;
+		runes[10] = true;
+		runes[5] = true;
+		draws = 1;
 	}
 
 	void reset()
@@ -681,7 +695,32 @@ public:
 	
 	int score() const
 	{
-		return health + field.guardHealth() + field.attackPower();
+		return PLAYER_HEALTH_SCORE*(health + field.guardHealth() + field.attackPower()) + PLAYER_DRAW_SCORE*draws;
+	}
+	
+	void healthChange(int amount)
+	{
+		int begin = health;
+		int end = health = amount;
+		
+		health = end;
+		for (auto thisRune : runes)
+		{
+			if (thisRune.first <= begin && thisRune.first > end)
+			{
+				thisRune.second = false;
+				drawsChange(1);
+			}
+		}
+	}
+	void drawsChange(int amount)
+	{
+		draws += amount;
+		int availableDraws = 8 - hand.size();
+		if (draws > availableDraws)
+		{
+			draws = availableDraws;
+		}
 	}
 };
 
@@ -727,6 +766,8 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				testSourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId).Comment(comment));
 
 				testSourcePlayer.cast(nextCard.cost);
+				testSourcePlayer.drawsChange(nextCard.cardDraw);
+
 				if (!nextCard.charge)
 				{
 					nextCard.hasAttacked = true;
@@ -769,9 +810,9 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 				if (use)
 				{
-					testSourcePlayer.health += nextCard.myHealthChange;
-					testTargetPlayer.health += nextCard.opponentHealthChange;
-					// TODO Modify card draws
+					testSourcePlayer.healthChange(nextCard.myHealthChange);
+					testTargetPlayer.healthChange(nextCard.opponentHealthChange);
+					testSourcePlayer.drawsChange(nextCard.cardDraw);
 					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target).Comment(comment));
 				}
 				else
@@ -831,7 +872,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			{
 				Player testSourcePlayer = sourcePlayer;
 				Player testTargetPlayer = targetPlayer;
-				testTargetPlayer.health -= testSourcePlayer.field.cards[attacker].attack;
+				testTargetPlayer.healthChange(-testSourcePlayer.field.cards[attacker].attack);
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
 
@@ -847,8 +888,9 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 			{
 				Player testSourcePlayer = sourcePlayer;
 				Player testTargetPlayer = targetPlayer;
-				
-				testSourcePlayer.health += testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]);
+
+				testSourcePlayer.healthChange(testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]));
+				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
 
