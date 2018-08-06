@@ -703,7 +703,7 @@ public:
 	void healthChange(int amount)
 	{
 		int begin = health;
-		int end = health = amount;
+		int end = health - amount;
 		
 		health = end;
 		for (auto thisRune : runes)
@@ -715,6 +715,7 @@ public:
 			}
 		}
 	}
+
 	void drawsChange(int amount)
 	{
 		draws += amount;
@@ -892,7 +893,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				Player testTargetPlayer = targetPlayer;
 
 				testSourcePlayer.healthChange(testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker]));
-//				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
+				testTargetPlayer.healthChange(testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender]));
 				testSourcePlayer.field.cards[attacker].hasAttacked = true;
 				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
 
