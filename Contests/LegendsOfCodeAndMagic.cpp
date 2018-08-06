@@ -23,7 +23,7 @@ using namespace std;
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
 #define PLAYER_HEALTH_SCORE 1000
-#define PLAYER_GUARD_SCORE 10
+#define PLAYER_GUARD_SCORE 100
 #define PLAYER_ATTACK_SCORE 10
 #define PLAYER_DRAW_SCORE 1
 
@@ -244,6 +244,7 @@ bool compareEnchant(Card lhs, Card rhs)
 class Deck
 {
 public:
+	string name;
 	map<int, Card> cards;
 	map<int, int> buckets;
 
@@ -536,6 +537,16 @@ public:
 		
 		return -1;
 	}
+	
+	friend ostream &operator<<(ostream &os, Deck const &m)
+	{
+		os << "Deck " << m.name;
+		for (auto card : m.cards)
+		{
+			os << " " << card.first;
+		}
+		return os;
+	}
 };
 
 class Action
@@ -681,7 +692,7 @@ public:
 		return score() < rhs.score();
 	}
 
-	void setup (int index, int _health, int _mana, int _deck, int _rune)
+	void setup(int index, int _health, int _mana, int _deck, int _rune)
 	{
 		self = index == 0;
 		health = _health;
@@ -699,7 +710,7 @@ public:
 		draws = 1;
 	}
 
-	void cast (int cost)
+	void cast(int cost)
 	{
 		mana -= cost;
 	}
@@ -803,7 +814,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				}
 				testSourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
 			}
-			else
+			else if (!nextCard.isCreature)
 			{
 				int target = -1;
 				bool use = false;
@@ -969,10 +980,14 @@ int main()
 			if (i==0)
 			{
 				self.setup(i, playerHealth, playerMana, playerDeck, playerRune);
+				self.hand.name = "SELF HAND";
+				self.field.name = "SELF FIELD";
 			}
 			else
 			{
 				opponent.setup(i, playerHealth, playerMana, playerDeck, playerRune);
+				opponent.hand.name = "OPPONENT HAND";
+				opponent.field.name = "OPPONENT FIELD";
 			}
         }
 
