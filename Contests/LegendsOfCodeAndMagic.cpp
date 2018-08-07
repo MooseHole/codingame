@@ -8,6 +8,7 @@ using namespace std;
 #define MAX_CHEAP 2
 #define MIN_ENCHANT 3
 #define BUCKET_MAX 3
+#define BUCKET_MAX_COST 7
 #define MAX_HAND_CARDS 8
 #define MAX_FIELD_CARDS 6
 #define NO_TARGET -10000
@@ -37,7 +38,6 @@ public:
     int cost;
     int attack;
     int defense;
-//    string abilities;
     int myHealthChange;
     int opponentHealthChange;
     int cardDraw;
@@ -69,7 +69,6 @@ public:
 		cost = std::move(other.cost);
 		attack = std::move(other.attack);
 		defense = std::move(other.defense);
-//		abilities = std::move(other.abilities);
 		myHealthChange = std::move(other.myHealthChange);
 		opponentHealthChange = std::move(other.opponentHealthChange);
 		cardDraw = std::move(other.cardDraw);
@@ -94,7 +93,6 @@ public:
 		cost = other.cost;
 		attack = other.attack;
 		defense = other.defense;
-//		abilities = other.abilities;
 		myHealthChange = other.myHealthChange;
 		opponentHealthChange = other.opponentHealthChange;
 		cardDraw = other.cardDraw;
@@ -119,7 +117,6 @@ public:
 		cost = _cost;
 		attack = _attack;
 		defense = _defense;
-//		abilities = _abilities;
 		myHealthChange = _myHealthChange;
 		opponentHealthChange = _opponentHealthChange;
 		cardDraw = _cardDraw;
@@ -447,7 +444,7 @@ public:
 		for (auto it : cards)
 		{
 			int thisCost = it.second.cost;
-			thisCost = thisCost > 7 ? 7 : thisCost;
+			thisCost = thisCost > BUCKET_MAX_COST ? BUCKET_MAX_COST : thisCost;
 			int thisWorth = (buckets[thisCost] >= BUCKET_MAX ? -1000 : 0) + it.second.rawWorth();
 			if(thisWorth > highestWorth)
 			{
@@ -459,7 +456,7 @@ public:
 		
 		if (buckets[bestCost] >= BUCKET_MAX)
 		{
-			comment += "Lots of " + (bestCost >= 7 ? "7+" : std::to_string(bestCost)) + "s.";
+			comment += "Lots of " + (bestCost >= BUCKET_MAX_COST ? std::to_string(BUCKET_MAX_COST)+"+" : std::to_string(bestCost)) + "s.";
 		}
 
 		buckets[bestCost]++;
@@ -490,7 +487,6 @@ public:
 				if (it.second.ward)
 				{
 					guardDefense += 1;
-//					guardDefense += GUARD_AND_WARD_SCORE;
 				}
 			}
 		}
@@ -504,9 +500,9 @@ public:
 		for (auto it : cards)
 		{
 			power += it.second.attack;
-//			power += (it.second.lethal ? LETHAL_SCORE : 0);
-//			power += (it.second.breakthrough ? BREAKTHROUGH_SCORE : 0);
-//			power += (it.second.drain ? DRAIN_SCORE : 0);
+			power += (it.second.lethal ? LETHAL_SCORE : 0);
+			power += (it.second.breakthrough ? BREAKTHROUGH_SCORE : 0);
+			power += (it.second.drain ? DRAIN_SCORE : 0);
 		}
 		
 		return power;
@@ -701,6 +697,8 @@ public:
 		deck = _deck;
 		rune = _rune;
 		draws = 1;
+		hand.name = (self ? "SELF HAND" : "OPPONENT HAND");
+		field.name = (self ? "SELF FIELD" : "OPPONENT FIELD");
 	}
 
 	void reset()
@@ -740,11 +738,17 @@ public:
 	
 	void updateRunes()
 	{
-		if (rune > 5 && health < 25) drawsChange(1);
-		if (rune > 4 && health < 20) drawsChange(1);
-		if (rune > 3 && health < 15) drawsChange(1);
-		if (rune > 2 && health < 10) drawsChange(1);
-		if (rune > 1 && health <  5) drawsChange(1);
+		if (rune == 5 && health < 25) breakRune();
+		if (rune == 4 && health < 20) breakRune();
+		if (rune == 3 && health < 15) breakRune();
+		if (rune == 2 && health < 10) breakRune();
+		if (rune == 1 && health <  5) breakRune();
+	}
+	
+	void breakRune()
+	{
+		drawsChange(1);
+		rune--;
 	}
 
 	void drawsChange(int amount)
