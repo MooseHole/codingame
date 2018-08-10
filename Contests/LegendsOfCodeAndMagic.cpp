@@ -789,11 +789,16 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 	while (true)
 	{
 		vector<int> cardsInHand;
+		bool anyCreaturesInHand = false;
 		for (auto it : sourcePlayer.hand.cards)
 		{
 			if (!it.second.exclude && it.second.cost <= sourcePlayer.mana)
 			{
 				cardsInHand.push_back(it.first);
+				if (it.second.isCreature)
+				{
+					anyCreaturesInHand = true;
+				}
 			}
 		}
 		if (cardsInHand.empty())
@@ -835,7 +840,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 				}
 				testSourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
 			}
-			else if (!nextCard.isCreature)
+			else if (!anyCreaturesInHand && !nextCard.isCreature)
 			{
 				int target = -1;
 				bool use = false;
