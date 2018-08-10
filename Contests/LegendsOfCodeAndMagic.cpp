@@ -3,6 +3,7 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <cmath>
 
 using namespace std;
 #define MAX_CHEAP 2
@@ -49,6 +50,7 @@ public:
 	bool ward;
 	bool isCreature;
 	bool hasAttacked;
+	bool summoningSickness;
 	bool exclude;
 
 	Card()
@@ -80,6 +82,7 @@ public:
 		ward = std::move(other.ward);
 		isCreature = std::move(other.isCreature);
 		hasAttacked = std::move(other.hasAttacked);
+		summoningSickness = std::move(other.summoningSickness);
 		exclude = std::move(other.exclude);
 		return *this;
 	}
@@ -104,6 +107,7 @@ public:
 		ward = other.ward;
 		isCreature = other.isCreature;
 		hasAttacked = other.hasAttacked;
+		summoningSickness = other.summoningSickness;
 		exclude = other.exclude;
 		return *this;
 	}
@@ -128,6 +132,7 @@ public:
 		ward = _abilities[5] == 'W';
 		isCreature = _type == 0;
 		hasAttacked = false;
+		summoningSickness = false;
 		exclude = false;
 	}
 	
@@ -282,6 +287,10 @@ public:
 		if (enchantment.guard) cards[instanceId].guard = abilityModifier;
 		if (enchantment.lethal) cards[instanceId].lethal = abilityModifier;
 		if (enchantment.ward) cards[instanceId].ward = abilityModifier;
+		if (enchantment.type == 1 && enchantment.charge && cards[instanceId].summoningSickness)
+		{
+			cards[instanceId].summoningSickness = false;
+		}
 	}
 
 	int firstCard() const
@@ -499,7 +508,7 @@ public:
 		int power = 0;
 		for (auto it : cards)
 		{
-			power += it.second.attack;
+			power += (it.second.summoningSickness ? (int)ceil((float)it.second.attack / 2.0) : it.second.attack);
 			power += (it.second.lethal ? LETHAL_SCORE : 0);
 			power += (it.second.breakthrough ? BREAKTHROUGH_SCORE : 0);
 			power += (it.second.drain ? DRAIN_SCORE : 0);
@@ -815,7 +824,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 
 				if (!nextCard.charge)
 				{
-					nextCard.hasAttacked = true;
+					nextCard.summoningSickness = true;
 				}
 				testSourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
 			}
@@ -885,7 +894,7 @@ Player simulate(Player sourcePlayer, Player targetPlayer)
 		vector<int> cardsThatCanAttack;
 		for (auto it : sourcePlayer.field.cards)
 		{
-			if (it.second.isCreature && !it.second.hasAttacked)
+			if (it.second.isCreature && !it.second.hasAttacked && !it.second.summoningSickness)
 			{
 				cardsThatCanAttack.push_back(it.first);
 			}
