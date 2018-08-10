@@ -461,7 +461,7 @@ public:
 		{
 			int thisCost = it.second.cost;
 			thisCost = thisCost > BUCKET_MAX_COST ? BUCKET_MAX_COST : thisCost;
-			int thisWorth = (buckets[thisCost] >= BUCKET_MAX ? -1000 : 0) + it.second.rawWorth();
+			int thisWorth = (thisCost > 3 && buckets[thisCost] >= BUCKET_MAX ? -1000 : 0) + it.second.rawWorth();
 			if(thisWorth > highestWorth)
 			{
 				bestId = it.first;
