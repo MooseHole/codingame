@@ -277,8 +277,6 @@ public:
 	
 	void enchant(int instanceId, Card enchantment)
 	{
-		cards[instanceId].attack += enchantment.attack;
-		cards[instanceId].defense += enchantment.defense;
 		// True if Green, False otherwise
 		bool abilityModifier = (enchantment.type == 1);
 		if (enchantment.breakthrough) cards[instanceId].breakthrough = abilityModifier;
@@ -290,6 +288,15 @@ public:
 		if (enchantment.type == 1 && enchantment.charge && cards[instanceId].summoningSickness)
 		{
 			cards[instanceId].summoningSickness = false;
+		}
+		cards[instanceId].attack += enchantment.attack;
+		if (enchantment.defense <= 0 && cards[instanceId].ward)
+		{
+			cards[instanceId].ward = false;
+		}
+		else
+		{
+			cards[instanceId].defense += enchantment.defense;
 		}
 	}
 
