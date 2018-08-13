@@ -8,7 +8,8 @@
 using namespace std;
 #define MAX_CHEAP 2
 #define MIN_ENCHANT 3
-#define BUCKET_MAX 3
+#define BUCKET_MAX 30,10,8,6,5,4,3,3
+#define NUMBER_OF_BUCKETS 8
 #define BUCKET_MAX_COST 7
 #define MAX_HAND_CARDS 8
 #define MAX_FIELD_CARDS 6
@@ -249,6 +250,7 @@ public:
 	string name;
 	map<int, Card> cards;
 	map<int, int> buckets;
+	int bucket_max[NUMBER_OF_BUCKETS] = { BUCKET_MAX };
 
 	void clear()
 	{
@@ -461,7 +463,7 @@ public:
 		{
 			int thisCost = it.second.cost;
 			thisCost = thisCost > BUCKET_MAX_COST ? BUCKET_MAX_COST : thisCost;
-			int thisWorth = (thisCost > 3 && buckets[thisCost] >= BUCKET_MAX ? -1000 : 0) + it.second.rawWorth();
+			int thisWorth = (buckets[thisCost] >= bucket_max[thisCost] ? -1000 : 0) + it.second.rawWorth();
 			if(thisWorth > highestWorth)
 			{
 				bestId = it.first;
@@ -470,7 +472,7 @@ public:
 			}
 		}
 		
-		if (buckets[bestCost] >= BUCKET_MAX)
+		if (buckets[bestCost] >= bucket_max[bestCost])
 		{
 			comment += "Lots of " + (bestCost >= BUCKET_MAX_COST ? std::to_string(BUCKET_MAX_COST)+"+" : std::to_string(bestCost)) + "s.";
 		}
@@ -522,33 +524,6 @@ public:
 		}
 		
 		return power;
-	}
-	
-	template <typename Comparator>
-	int nextCanCast(int mana, Comparator compare) const
-	{
-		vector<Card> casts;
-		for (auto it : cards)
-		{
-			if (!it.second.hasAttacked)
-			{
-				casts.push_back(it.second);
-			}
-		}
-		
-		if (casts.size() > 0)
-		{
-			sort (casts.begin(), casts.end(), compare);
-			for (auto cast : casts)
-			{
-				if (cast.cost <= mana)
-				{
-					return cast.instanceId;
-				}
-			}
-		}
-		
-		return -1;
 	}
 	
 	friend ostream &operator<<(ostream &os, Deck const &m)
