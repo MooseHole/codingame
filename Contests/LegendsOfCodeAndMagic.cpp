@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <list>
 #include <algorithm>
 #include <cmath>
 
@@ -242,6 +243,17 @@ bool compareEnchant(Card lhs, Card rhs)
 	if (!lhs.isCreature && rhs.isCreature) return true;
 	if (lhs.isCreature && !rhs.isCreature) return false;
 	return compareRawWorth(lhs, rhs);
+}
+
+bool compareCast(Card lhs, Card rhs)
+{
+	if (lhs.isCreature && !rhs.isCreature) return true;
+	if (!lhs.isCreature && rhs.isCreature) return false;
+	if (lhs.charge && !rhs.charge) return true;
+	if (!lhs.charge && rhs.charge) return false;
+	if (lhs.cost > rhs.cost) return true;
+	if (lhs.cost < rhs.cost) return false;
+	return (lhs.instanceId < rhs.instanceId);
 }
 
 class Deck
@@ -758,219 +770,239 @@ public:
 	}
 };
 
-Player simulate(Player sourcePlayer, Player targetPlayer)
+bool simulateCast(Player &sourcePlayer, Player &targetPlayer)
 {
-	bool anyNewAction;
-	do
+	bool anyNewAction = false;
+	// Find cards to use/summon
+	while (true)
 	{
-		anyNewAction = false;
-		// Find cards to use/summon
-		while (true)
+		bool anyCreaturesInHand = false;
+		vector<Card> cardsInHand;
+		for (auto it : sourcePlayer.hand.cards)
 		{
-			vector<int> cardsInHand;
-			bool anyCreaturesInHand = false;
-			for (auto it : sourcePlayer.hand.cards)
+			if (!it.second.exclude && it.second.cost <= sourcePlayer.mana)
 			{
-				if (!it.second.exclude && it.second.cost <= sourcePlayer.mana)
+				cardsInHand.push_back(it.second);
+				if (it.second.isCreature)
 				{
-					cardsInHand.push_back(it.first);
-					if (it.second.isCreature)
-					{
-						anyCreaturesInHand = true;
-					}
+					anyCreaturesInHand = true;
 				}
 			}
-			if (cardsInHand.empty())
+		}
+		if (cardsInHand.empty())
+		{
+			break;
+		}
+		sort (cardsInHand.begin(), cardsInHand.end(), compareCast);
+		
+		Player bestSourcePlayer = sourcePlayer;
+		Player bestTargetPlayer = targetPlayer;
+		bool first = true;
+		for (auto card : cardsInHand)
+		{
+			Player testSourcePlayer = sourcePlayer;
+			Player testTargetPlayer = targetPlayer;
+			Card nextCard = card;
+			testSourcePlayer.hand.removeCard(card.instanceId);
+
+			if (nextCard.isCreature && testSourcePlayer.field.size() < MAX_FIELD_CARDS)
 			{
-				break;
+				string comment = "";
+				if (nextCard.guard)
+				{
+					comment = "This should keep me safe.";
+				}
+				else if (nextCard.attack >= 5)
+				{
+					comment = "Check out this puppy.";
+				}
+				testSourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId).Comment(comment));
+
+				testSourcePlayer.cast(nextCard.cost);
+				testSourcePlayer.drawsChange(nextCard.cardDraw);
+				testSourcePlayer.healthChange(nextCard.myHealthChange);
+				testTargetPlayer.healthChange(nextCard.opponentHealthChange);
+
+				if (!nextCard.charge)
+				{
+					nextCard.summoningSickness = true;
+				}
+				testSourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
+			}
+			else if (!anyCreaturesInHand && !nextCard.isCreature)
+			{
+				int target = -1;
+				bool use = false;
+				string comment = "";
+				switch (nextCard.type)
+				{
+					case 1:
+						// Green, for positive for creatures
+						target = testSourcePlayer.field.friendToEnchant(nextCard);
+						if (target >= 0)
+						{
+							comment = "Power up!";
+							testSourcePlayer.field.enchant(target, nextCard);
+							use = true;
+						}
+						break;
+					case 2:
+						// Red, for negative for creatures
+						target = testTargetPlayer.field.enemyToEnchant(nextCard);
+						if (target >= 0)
+						{
+							comment = "Muahahaha";
+							testTargetPlayer.field.enchant(target, nextCard);
+							use = true;
+						}
+						break;
+					case 3:
+						// Blue, generally use on players
+						comment = "Bwoop";
+						use = true;
+						break;
+				}
+
+				if (use)
+				{
+					testSourcePlayer.healthChange(nextCard.myHealthChange);
+					testTargetPlayer.healthChange(nextCard.opponentHealthChange);
+					testSourcePlayer.drawsChange(nextCard.cardDraw);
+					testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target).Comment(comment));
+					testSourcePlayer.cast(nextCard.cost);
+				}
+				else
+				{
+					testSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
+					bestSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
+				}
 			}
 			
-			Player bestSourcePlayer = sourcePlayer;
-			Player bestTargetPlayer = targetPlayer;
-			bool first = true;
-			for (auto cardId : cardsInHand)
+			if (first || bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+			{
+				first = false;
+				bestSourcePlayer = std::move(testSourcePlayer);
+				bestTargetPlayer = std::move(testTargetPlayer);
+			}
+		}
+
+		if (sourcePlayer.actions.size() < bestSourcePlayer.actions.size())
+		{
+			anyNewAction = true;
+		}
+		sourcePlayer = std::move(bestSourcePlayer);
+		targetPlayer = std::move(bestTargetPlayer);
+	}
+
+	return anyNewAction;
+}
+
+bool simulateAttack(Player &sourcePlayer, Player &targetPlayer)
+{
+	bool anyNewAction = false;
+	int previousNumberOfCardsThatCanAttack = -1;
+	while (true)
+	{
+		// Find cards to attack with
+		vector<int> cardsThatCanAttack;
+		for (auto it : sourcePlayer.field.cards)
+		{
+			if (it.second.isCreature && !it.second.hasAttacked && !it.second.summoningSickness)
+			{
+				cardsThatCanAttack.push_back(it.first);
+			}
+		}
+		
+		int numberOfCardsThatCanAttack = cardsThatCanAttack.size();
+		if (numberOfCardsThatCanAttack == 0 || numberOfCardsThatCanAttack == previousNumberOfCardsThatCanAttack)
+		{
+			break;
+		}
+		previousNumberOfCardsThatCanAttack = numberOfCardsThatCanAttack;
+
+		Player bestSourcePlayer = sourcePlayer;
+		Player bestTargetPlayer = targetPlayer;
+
+		for (auto attacker : cardsThatCanAttack)
+		{
+			bool anyGuard = targetPlayer.field.anyGuard();
+			vector<int> cardsThatCanDefend;
+			for (auto it : targetPlayer.field.cards)
+			{
+				if (!anyGuard || (it.second.isCreature && it.second.guard))
+				{
+					cardsThatCanDefend.push_back(it.first);
+				}
+			}
+
+			if (!anyGuard)
 			{
 				Player testSourcePlayer = sourcePlayer;
 				Player testTargetPlayer = targetPlayer;
-				Card nextCard = testSourcePlayer.hand.getCard(cardId);
-				testSourcePlayer.hand.removeCard(cardId);
+				testTargetPlayer.healthChange(testSourcePlayer.field.cards[attacker].attack);
+				testSourcePlayer.field.cards[attacker].hasAttacked = true;
+				testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
 
-				if (nextCard.isCreature && testSourcePlayer.field.size() < MAX_FIELD_CARDS)
+				if (!testSourcePlayer.field.cards[attacker].hasAttacked
+				 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
 				{
-					string comment = "";
-					if (nextCard.guard)
-					{
-						comment = "This should keep me safe.";
-					}
-					else if (nextCard.attack >= 5)
-					{
-						comment = "Check out this puppy.";
-					}
-					testSourcePlayer.actions.push_back(Action().Summon(nextCard.instanceId).Comment(comment));
-
-					testSourcePlayer.cast(nextCard.cost);
-					testSourcePlayer.drawsChange(nextCard.cardDraw);
-					testSourcePlayer.healthChange(nextCard.myHealthChange);
-					testTargetPlayer.healthChange(nextCard.opponentHealthChange);
-
-					if (!nextCard.charge)
-					{
-						nextCard.summoningSickness = true;
-					}
-					testSourcePlayer.field.putCard(nextCard.instanceId, std::move(nextCard));
-				}
-				else if (!anyCreaturesInHand && !nextCard.isCreature)
-				{
-					int target = -1;
-					bool use = false;
-					string comment = "";
-					switch (nextCard.type)
-					{
-						case 1:
-							// Green, for positive for creatures
-							target = testSourcePlayer.field.friendToEnchant(nextCard);
-							if (target >= 0)
-							{
-								comment = "Power up!";
-								testSourcePlayer.field.enchant(target, nextCard);
-								use = true;
-							}
-							break;
-						case 2:
-							// Red, for negative for creatures
-							target = testTargetPlayer.field.enemyToEnchant(nextCard);
-							if (target >= 0)
-							{
-								comment = "Muahahaha";
-								testTargetPlayer.field.enchant(target, nextCard);
-								use = true;
-							}
-							break;
-						case 3:
-							// Blue, generally use on players
-							comment = "Bwoop";
-							use = true;
-							break;
-					}
-
-					if (use)
-					{
-						testSourcePlayer.healthChange(nextCard.myHealthChange);
-						testTargetPlayer.healthChange(nextCard.opponentHealthChange);
-						testSourcePlayer.drawsChange(nextCard.cardDraw);
-						testSourcePlayer.actions.push_back(Action().Use(nextCard.instanceId, target).Comment(comment));
-						testSourcePlayer.cast(nextCard.cost);
-					}
-					else
-					{
-						testSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
-						bestSourcePlayer.field.cards[nextCard.instanceId].exclude = true;
-					}
-				}
-				
-				if (first || bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
-				{
-					first = false;
 					bestSourcePlayer = std::move(testSourcePlayer);
 					bestTargetPlayer = std::move(testTargetPlayer);
 				}
 			}
 
-			if (sourcePlayer.actions.size() < bestSourcePlayer.actions.size())
+			for (auto defender : cardsThatCanDefend)
 			{
-				cerr << "A " << sourcePlayer.actions.size() << " < " << bestSourcePlayer.actions.size() << endl;
-				anyNewAction = true;
+				Player testSourcePlayer = sourcePlayer;
+				Player testTargetPlayer = targetPlayer;
+
+				int attackerHealthChange;
+				int defenderHealthChange;
+				testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker], attackerHealthChange, defenderHealthChange);
+				// Health changes only occur for the attacker
+				testSourcePlayer.healthChange(attackerHealthChange);
+				testTargetPlayer.healthChange(defenderHealthChange);
+				testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender], attackerHealthChange, defenderHealthChange);
+				testSourcePlayer.field.cards[attacker].hasAttacked = true;
+				testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
+
+				if (!testSourcePlayer.field.cards[attacker].hasAttacked
+				 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
+				{
+					bestSourcePlayer = std::move(testSourcePlayer);
+					bestTargetPlayer = std::move(testTargetPlayer);
+				}
 			}
-			sourcePlayer = std::move(bestSourcePlayer);
-			targetPlayer = std::move(bestTargetPlayer);
 		}
 
-		int previousNumberOfCardsThatCanAttack = -1;
-		while (true)
+		if (sourcePlayer.actions.size() < bestSourcePlayer.actions.size())
 		{
-			// Find cards to attack with
-			vector<int> cardsThatCanAttack;
-			for (auto it : sourcePlayer.field.cards)
-			{
-				if (it.second.isCreature && !it.second.hasAttacked && !it.second.summoningSickness)
-				{
-					cardsThatCanAttack.push_back(it.first);
-				}
-			}
-			
-			int numberOfCardsThatCanAttack = cardsThatCanAttack.size();
-			if (numberOfCardsThatCanAttack == 0 || numberOfCardsThatCanAttack == previousNumberOfCardsThatCanAttack)
-			{
-				break;
-			}
-			previousNumberOfCardsThatCanAttack = numberOfCardsThatCanAttack;
-
-			Player bestSourcePlayer = sourcePlayer;
-			Player bestTargetPlayer = targetPlayer;
-
-			for (auto attacker : cardsThatCanAttack)
-			{
-				bool anyGuard = targetPlayer.field.anyGuard();
-				vector<int> cardsThatCanDefend;
-				for (auto it : targetPlayer.field.cards)
-				{
-					if (!anyGuard || (it.second.isCreature && it.second.guard))
-					{
-						cardsThatCanDefend.push_back(it.first);
-					}
-				}
-
-				if (!anyGuard)
-				{
-					Player testSourcePlayer = sourcePlayer;
-					Player testTargetPlayer = targetPlayer;
-					testTargetPlayer.healthChange(testSourcePlayer.field.cards[attacker].attack);
-					testSourcePlayer.field.cards[attacker].hasAttacked = true;
-					testSourcePlayer.actions.push_back(Action().Attack(attacker, -1).Comment("Eat this!"));
-
-					if (!testSourcePlayer.field.cards[attacker].hasAttacked
-					 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
-					{
-						bestSourcePlayer = std::move(testSourcePlayer);
-						bestTargetPlayer = std::move(testTargetPlayer);
-					}
-				}
-
-				for (auto defender : cardsThatCanDefend)
-				{
-					Player testSourcePlayer = sourcePlayer;
-					Player testTargetPlayer = targetPlayer;
-
-					int attackerHealthChange;
-					int defenderHealthChange;
-					testTargetPlayer.field.damageCard(defender, sourcePlayer.field.cards[attacker], attackerHealthChange, defenderHealthChange);
-					// Health changes only occur for the attacker
-					testSourcePlayer.healthChange(attackerHealthChange);
-					testTargetPlayer.healthChange(defenderHealthChange);
-					testSourcePlayer.field.damageCard(attacker, targetPlayer.field.cards[defender], attackerHealthChange, defenderHealthChange);
-					testSourcePlayer.field.cards[attacker].hasAttacked = true;
-					testSourcePlayer.actions.push_back(Action().Attack(attacker, defender).Comment("Die."));
-
-					if (!testSourcePlayer.field.cards[attacker].hasAttacked
-					 ||	bestSourcePlayer.score() - bestTargetPlayer.score() < testSourcePlayer.score() - testTargetPlayer.score())
-					{
-						bestSourcePlayer = std::move(testSourcePlayer);
-						bestTargetPlayer = std::move(testTargetPlayer);
-					}
-				}
-			}
-
-			if (sourcePlayer.actions.size() < bestSourcePlayer.actions.size())
-			{
-				cerr << "B " << sourcePlayer.actions.size() << " < " << bestSourcePlayer.actions.size() << endl;
-				anyNewAction = true;
-			}
-			sourcePlayer = std::move(bestSourcePlayer);
-			targetPlayer = std::move(bestTargetPlayer);
+			anyNewAction = true;
 		}
-	} while (anyNewAction);
+		sourcePlayer = std::move(bestSourcePlayer);
+		targetPlayer = std::move(bestTargetPlayer);
+	}
 
-	return sourcePlayer;
+	return anyNewAction;
+}
+
+void simulateNewTurn(Player &onePlayer, Player &otherPlayer)
+{
+	for (auto it : onePlayer.field.cards)
+	{
+		it.second.summoningSickness = false;
+		it.second.hasAttacked = false;
+	}
+	for (auto it : otherPlayer.field.cards)
+	{
+		it.second.summoningSickness = false;
+		it.second.hasAttacked = false;
+	}
+}
+
+bool simulate(Player &sourcePlayer, Player &targetPlayer)
+{
+	while (simulateCast(sourcePlayer, targetPlayer) || simulateAttack(sourcePlayer, targetPlayer));
 }
 
 /**
@@ -1062,7 +1094,7 @@ int main()
 		}
 		else
 		{
-			self = simulate(self, opponent);
+			simulate(self, opponent);
 		}
 
 		if (self.actions.empty())
