@@ -1018,28 +1018,32 @@ bool simulate(Player &sourcePlayer, Player &targetPlayer)
 * Auto-generated code below aims at helping you parse
 * the standard input according to the problem statement.
 **/
-int main()
+int main(int argc, const char * argv[])
 {
-    string inputName, inputValue;
-    ifstream configurationFile("configuration.txt");
-    if (configurationFile.is_open())
+    if (argc >= 1)
     {
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> LETHAL_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> ATTACK_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> BREAKTHROUGH_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> CHARGE_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DRAIN_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> GUARD_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> GUARD_AND_WARD_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> WARD_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> HEAL_ME_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DAMAGE_THEM_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DRAW_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_HEALTH_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_GUARD_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_ATTACK_SCORE;
-        getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_DRAW_SCORE;
-        configurationFile.close();
+        string inputName, inputValue;
+//        ifstream configurationFile("configuration.txt");
+        ifstream configurationFile("configuration" + (string)argv[0] + ".txt");
+        if (configurationFile.is_open())
+        {
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> LETHAL_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> ATTACK_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> BREAKTHROUGH_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> CHARGE_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DRAIN_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> GUARD_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> GUARD_AND_WARD_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> WARD_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> HEAL_ME_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DAMAGE_THEM_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> DRAW_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_HEALTH_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_GUARD_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_ATTACK_SCORE;
+            getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> PLAYER_DRAW_SCORE;
+            configurationFile.close();
+        }
     }
 
     Player self;
