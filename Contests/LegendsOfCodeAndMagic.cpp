@@ -7,14 +7,15 @@
 #include <cmath>
 
 using namespace std;
-#define MAX_CHEAP 2
-#define MIN_ENCHANT 3
-#define BUCKET_MAX 30,10,8,6,5,4,3,3
-#define NUMBER_OF_BUCKETS 8
-#define BUCKET_MAX_COST 7
+
+// Defined by problem
 #define MAX_HAND_CARDS 8
 #define MAX_FIELD_CARDS 6
+
+// Problem specific defines
 #define NO_TARGET -10000
+
+// Scores
 #define LETHAL_SCORE 10
 #define ATTACK_SCORE 2
 #define BREAKTHROUGH_SCORE 4
@@ -30,6 +31,11 @@ using namespace std;
 #define PLAYER_GUARD_SCORE 100
 #define PLAYER_ATTACK_SCORE 100
 #define PLAYER_DRAW_SCORE 1
+
+// Buckets
+#define BUCKET_MAX 30,10,8,6,5,4,3,3
+#define NUMBER_OF_BUCKETS 8
+#define BUCKET_MAX_COST 7
 
 class Card
 {
