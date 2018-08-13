@@ -27,8 +27,8 @@ using namespace std;
 #define DAMAGE_THEM_SCORE 3
 #define DRAW_SCORE 5
 #define PLAYER_HEALTH_SCORE 100
-#define PLAYER_GUARD_SCORE 100
-#define PLAYER_ATTACK_SCORE 100
+#define PLAYER_GUARD_SCORE 1000
+#define PLAYER_ATTACK_SCORE 1000
 #define PLAYER_DRAW_SCORE 1
 
 class Card
