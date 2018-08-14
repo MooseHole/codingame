@@ -263,3 +263,4 @@ __pycache__/
 # LegendsOfCodeAndMagic logs
 **/LegendsOfCodeAndMagic_Artifacts/logs/
 runnerOutput.txt
+enc_temp_folder/
