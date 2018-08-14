@@ -1020,13 +1020,12 @@ bool simulate(Player &sourcePlayer, Player &targetPlayer)
 **/
 int main(int argc, const char * argv[])
 {
-    if (argc >= 1)
+    if (argc == 2)
     {
-        string inputName, inputValue;
-//        ifstream configurationFile("configuration.txt");
-        ifstream configurationFile("configuration" + (string)argv[0] + ".txt");
+        ifstream configurationFile("configuration" + (string)argv[1] + ".txt");
         if (configurationFile.is_open())
         {
+			string inputName, inputValue;
             getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> LETHAL_SCORE;
             getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> ATTACK_SCORE;
             getline(configurationFile, inputName, ' '); getline(configurationFile, inputValue); stringstream(inputValue) >> BREAKTHROUGH_SCORE;
@@ -1045,6 +1044,24 @@ int main(int argc, const char * argv[])
             configurationFile.close();
         }
     }
+	else if (argc == 16)
+	{
+		LETHAL_SCORE         = atoi(argv[1]);
+		ATTACK_SCORE         = atoi(argv[2]);
+		BREAKTHROUGH_SCORE   = atoi(argv[3]);
+		CHARGE_SCORE         = atoi(argv[4]);
+		DRAIN_SCORE          = atoi(argv[5]);
+		GUARD_SCORE          = atoi(argv[6]);
+		GUARD_AND_WARD_SCORE = atoi(argv[7]);
+		WARD_SCORE           = atoi(argv[8]);
+		HEAL_ME_SCORE        = atoi(argv[9]);
+		DAMAGE_THEM_SCORE    = atoi(argv[10]);
+		DRAW_SCORE           = atoi(argv[11]);
+		PLAYER_HEALTH_SCORE  = atoi(argv[12]);
+		PLAYER_GUARD_SCORE   = atoi(argv[13]);
+		PLAYER_ATTACK_SCORE  = atoi(argv[14]);
+		PLAYER_DRAW_SCORE    = atoi(argv[15]);
+	}
 
     Player self;
     Player opponent;
