@@ -4,3 +4,4 @@ java -jar .\cg-brutaltester.jar -r "java -jar -Dleague.level=4 LegendsOfCodeAndM
 
 https://github.com/fala13/LegendsOfCodeAndMagic_Artifacts
 https://github.com/dreignier/cg-brutaltester
+https://docs.google.com/spreadsheets/d/1D0YfgnGFQKzxErO-hlz4FFUJPqLpUsOQP3guuEEMscA/edit?usp=sharing
