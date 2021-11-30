@@ -355,11 +355,11 @@ public:
         }
     }
 
-    void RotateLeft()
+    string RotateLeft()
     {
         if (!_canRotate)
         {
-            return;
+            return "WAIT";
         }
 
         switch (_type)
@@ -404,13 +404,15 @@ public:
                 _type = 12;
                 break;
         }
+
+        return to_string(_location->x) + " " +  to_string(_location->y) + " LEFT";
     }
 
-    void RotateRight()
+    string RotateRight()
     {
         if (!_canRotate)
         {
-            return;
+            return "WAIT";
         }
 
         switch (_type)
@@ -455,6 +457,19 @@ public:
                 _type = 10;
                 break;
         }
+
+        return to_string(_location->x) + " " +  to_string(_location->y) + " RIGHT";
+    }
+
+    Room& operator=(const Room &r) 
+    {
+        _entrance = r._entrance;
+        _exit = r._exit;
+        _type = r._type;
+        _canRotate = r._canRotate;
+        _location = r._location;
+
+        return *this;
     }
 
     bool operator==(const Room& other)
@@ -502,7 +517,7 @@ public:
         cerr << "UpdateLocation updated the entrance" << endl;
     }
 
-    Room GetEnd(Coordinate* goal)
+    Room* GetEnd(Coordinate* goal)
     {
         Room* iterator = _current;
         while(1)
@@ -510,17 +525,22 @@ public:
             Direction exit = iterator->GetExit();
             if (exit == 'x')
             {
-                return *iterator;
+                return iterator;
             }
+
             Direction nextEntrance = exit.GetEntranceFromExit();
             Coordinate nextLocation = iterator->GetNextLocation();
             iterator = Rooms[nextLocation];
+            cerr << "iterator to " << nextLocation << " using entrance " << nextEntrance << endl;
             if (*iterator == *goal)
             {
-                return *iterator;
+                return iterator;
             }
 
-            iterator->UpdateEntrance(nextEntrance);
+            if (!iterator->UpdateEntrance(nextEntrance))
+            {
+                return iterator;
+            }
         }
     }
 
@@ -592,9 +612,16 @@ int main()
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
 
-        cerr << "Indy ends at: " << Indy.GetEnd(exit) << endl;
+        Room* end = Indy.GetEnd(exit);
+        cerr << "Indy ends at: " << *end << endl;
 
-        // One line containing on of three commands: 'X Y LEFT', 'X Y RIGHT' or 'WAIT'
-        cout << "WAIT" << endl;
+        if (*end == *exit)
+        {
+            cout << "WAIT" << endl;           
+        }
+        else
+        {
+            cout << end->RotateLeft() << endl;           
+        }
     }
 }
