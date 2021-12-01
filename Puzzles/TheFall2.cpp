@@ -6,8 +6,19 @@
 #include <iterator>
 #include <sstream>
 #include <algorithm>
+#include <unordered_map>
 
 using namespace std;
+
+enum class Compass { TOP, BOTTOM, LEFT, RIGHT, NONE };
+
+unordered_map<string, Compass> compassMap =
+{
+    {"TOP", Compass::TOP},
+    {"BOTTOM", Compass::BOTTOM},
+    {"LEFT", Compass::LEFT},
+    {"RIGHT", Compass::RIGHT}
+};
 
 class Coordinate
 {
@@ -31,12 +42,12 @@ public:
         return *this;
     }
 
-    bool operator==(const Coordinate& other)
+    bool operator==(const Coordinate& other) const
     {
         return x == other.x && y == other.y;
     }
 
-    bool operator!=(const Coordinate& other)
+    bool operator!=(const Coordinate& other) const
     {
         return !(*this == other);
     }
@@ -54,62 +65,62 @@ public:
 
 class Direction
 {
-    char _direction;
+    Compass _direction;
 
 public:
     Direction()
     {
-        _direction = 'x';
+        _direction = Compass::NONE;
     }
 
-    Direction(char direction) : _direction(direction)
+    Direction(Compass direction) : _direction(direction)
     {}
 
-    Direction& operator=(const char &d) 
+    Direction& operator=(const Compass &d) 
     {
         _direction = d;
 
         return *this;
     }
 
-    char getDirection()
+    Compass getDirection()
     {
         return _direction;
     }
 
-    char GetEntranceFromExit()
+    Compass GetEntranceFromExit()
     {
 	switch (_direction)
         {
-            case 'T':
-                return 'B';
-            case 'B':
-                return 'T';
-            case 'L':
-                return 'R';
-            case 'R':
-                return 'L';
+            case Compass::TOP:
+                return Compass::BOTTOM;
+            case Compass::BOTTOM:
+                return Compass::TOP;
+            case Compass::LEFT:
+                return Compass::RIGHT;
+            case Compass::RIGHT:
+                return Compass::LEFT;
             default:
-                return 'x';
+                return Compass::NONE;
         }
     }
 
-    bool operator==(const char& other)
+    bool operator==(const Compass& other) const
     {
         return _direction == other;
     }
 
-    bool operator==(const Direction& other)
+    bool operator==(const Direction& other) const
     {
         return *this == other._direction;
     }
 
-    bool operator!=(const char& other)
+    bool operator!=(const Compass& other) const
     {
         return !(*this == other);
     }
 
-    bool operator!=(const Direction& other)
+    bool operator!=(const Direction& other) const
     {
         return !(*this == other);
     }
@@ -118,16 +129,16 @@ public:
     {
 	switch (v._direction)
         {
-            case 'T':
+            case Compass::TOP:
                 return Str << "Top";
-            case 'B':
+            case Compass::BOTTOM:
                 return Str << "Bottom";
-            case 'L':
+            case Compass::LEFT:
                 return Str << "Left";
-            case 'R':
+            case Compass::RIGHT:
                 return Str << "Right";
             default:
-                return Str << "UNKNOWN DIRECTION";
+                return Str << "None";
         }
     }
 };
@@ -143,8 +154,8 @@ protected:
 
     void RefreshExits()
     {
-        _exit = 'x';
-        if (_entrance != 'L' && _entrance != 'R' && _entrance != 'T')
+        _exit = Compass::NONE;
+        if (_entrance != Compass::LEFT && _entrance != Compass::RIGHT && _entrance != Compass::TOP)
         {
             return;
         }
@@ -154,97 +165,97 @@ protected:
             case 0:
                 break;
             case 1:
-                _exit = 'B';
+                _exit = Compass::BOTTOM;
                 break;
             case 2:
             case 6:
-                if (_entrance == 'L')
+                if (_entrance == Compass::LEFT)
                 {
-                    _exit = 'R';
+                    _exit = Compass::RIGHT;
                 }
-                else if (_entrance == 'R')
+                else if (_entrance == Compass::RIGHT)
                 {
-                    _exit = 'L';
+                    _exit = Compass::LEFT;
                 }
                 break;
             case 3:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 4:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'L';
+                    _exit = Compass::LEFT;
                 }
-                else if (_entrance == 'R')
+                else if (_entrance == Compass::RIGHT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 5:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'R';
+                    _exit = Compass::RIGHT;
                 }
-                else if (_entrance == 'L')
+                else if (_entrance == Compass::LEFT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 7:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
-                else if (_entrance == 'R')
+                else if (_entrance == Compass::RIGHT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 8:
-                if (_entrance == 'L')
+                if (_entrance == Compass::LEFT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
-                else if (_entrance == 'R')
+                else if (_entrance == Compass::RIGHT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 9:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
-                else if (_entrance == 'L')
+                else if (_entrance == Compass::LEFT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 10:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'L';
+                    _exit = Compass::LEFT;
                 }
                 break;
             case 11:
-                if (_entrance == 'T')
+                if (_entrance == Compass::TOP)
                 {
-                    _exit = 'R';
+                    _exit = Compass::RIGHT;
                 }
                 break;
             case 12:
-                if (_entrance == 'R')
+                if (_entrance == Compass::RIGHT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
             case 13:
-                if (_entrance == 'L')
+                if (_entrance == Compass::LEFT)
                 {
-                    _exit = 'B';
+                    _exit = Compass::BOTTOM;
                 }
                 break;
         }
@@ -256,10 +267,10 @@ public:
         _canRotate = type > 0;
         _type = abs(type);
         _location = location;
-        UpdateEntrance('T');
+        UpdateEntrance(Compass::TOP);
     }
 
-    bool UpdateEntrance(char direction)
+    bool UpdateEntrance(const Compass direction)
     {
         if (CanEnter(direction))
         {
@@ -271,11 +282,11 @@ public:
         return false;
     }
 
-    bool UpdateEntrance(Direction direction)
+    bool UpdateEntrance(const Direction direction)
     {
-        if (direction == 'T') return UpdateEntrance('T');
-        if (direction == 'L') return UpdateEntrance('L');
-        if (direction == 'R') return UpdateEntrance('R');
+        if (direction == Compass::TOP) return UpdateEntrance(Compass::TOP);
+        if (direction == Compass::LEFT) return UpdateEntrance(Compass::LEFT);
+        if (direction == Compass::RIGHT) return UpdateEntrance(Compass::RIGHT);
 
         return false;
     }
@@ -285,11 +296,11 @@ public:
         return _exit;
     }
 
-    bool CanEnter(char direction)
+    bool CanEnter(Compass direction)
     {
         switch (direction)
         {
-            case 'T':
+            case Compass::TOP:
                 switch (_type)
                 {
                     case 1:
@@ -305,7 +316,7 @@ public:
                     default:
                         return false;
                 }
-            case 'L':
+            case Compass::LEFT:
                 switch (_type)
                 {
                     case 1:
@@ -321,7 +332,7 @@ public:
                     default:
                         return false;
                 }
-            case 'R':
+            case Compass::RIGHT:
                 switch (_type)
                 {
                     case 1:
@@ -346,12 +357,14 @@ public:
     {
         switch (_exit.getDirection())
         {
-            case 'B':
+            case Compass::BOTTOM:
                 return Coordinate(_location->x, _location->y + 1);
-            case 'L':
+            case Compass::LEFT:
                 return Coordinate(_location->x - 1, _location->y);
-            case 'R':
+            case Compass::RIGHT:
                 return Coordinate(_location->x + 1, _location->y);
+            default:
+                return *_location;
         }
     }
 
@@ -506,14 +519,14 @@ class Entity
 
 public:
 
-    void UpdateLocation(int x, int y, string entrance)
+    void UpdateLocation(int x, int y, const string entrance)
     {
         cerr << "UpdateLocation(" << x << ", " << y << ", " << entrance << ")" << endl;
         Coordinate location(x, y);
         cerr << "UpdateLocation location: " << location << endl;
         _current = Rooms[location];
         cerr << "UpdateLocation _current: " << *_current << endl;
-        _current->UpdateEntrance(entrance[0]);
+        _current->UpdateEntrance(compassMap[entrance]);
         cerr << "UpdateLocation updated the entrance" << endl;
     }
 
@@ -523,7 +536,7 @@ public:
         while(1)
         {
             Direction exit = iterator->GetExit();
-            if (exit == 'x')
+            if (exit == Compass::NONE)
             {
                 return iterator;
             }
