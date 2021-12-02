@@ -10,26 +10,33 @@ class Room
     public int ID;
     public int Cash;
     public int[] exits = new int[2];
-    public int BestCash;
-    public string BestPath;
 
     public Room(string initializer)
     {
-        Console.Error.WriteLine($"Room({initializer})");
         var attributes = initializer.Split(' ');
         ID = int.Parse(attributes[0]);
         Cash = int.Parse(attributes[1]);
         exits[0] = attributes[2] == "E" ? -1 : int.Parse(attributes[2]);
         exits[1] = attributes[3] == "E" ? -1 : int.Parse(attributes[3]);
     }
+}
 
-    public void DespositCash(int checkCash, string checkPath)
+struct RoomPath
+{
+    public int room;
+    public HashSet<int> path;
+    public int cash;
+
+    public RoomPath(int room, HashSet<int> oldPath, int cash)
     {
-        if (checkCash > BestCash)
-        {
-            BestCash = checkCash;
-            BestPath = checkPath;
-        }
+        this.room = room;
+        this.path = new HashSet<int>(oldPath) { room };
+        this.cash = cash;
+    }
+
+    public override string ToString()
+    {
+        return $"RoomPath room {room} path {string.Join("-", path)} cash ${cash}";
     }
 }
 
@@ -37,33 +44,39 @@ class Solution
 {
     static Dictionary<int, Room> rooms = new Dictionary<int, Room>();
 
-    static int EvaluateRoom(int roomNumber, string path, int pathCash)
+    static int EvaluateRoom(int initialRoom)
     {
-        var roomString = "[" + roomNumber + "]";
-
-        Room current = rooms[roomNumber];
-        int myPathCash = current.Cash + pathCash;
-        current.DespositCash(myPathCash, path + roomString);
+        Queue<RoomPath> process = new Queue<RoomPath>();
+        HashSet<int> initialPath = new HashSet<int>() { initialRoom };
+        var initialRoomPath = new RoomPath(initialRoom, initialPath, rooms[initialRoom].Cash);
+        Console.Error.WriteLine($"Queueing initial room: {initialRoomPath}");
+        process.Enqueue(initialRoomPath);
 
         int bestCash = -1;
-        foreach (var exit in rooms[roomNumber].exits)
+        while (process.Any())
         {
-            var exitString = "[" + exit + "]";
-            if (path.Contains(exitString))
-            {
-                Console.Error.WriteLine(path + " Contains " + exitString);
-                continue;
-            }
+            RoomPath roomPath = process.Dequeue();
+            var current = rooms[roomPath.room];
 
-            if (exit < 0)
+            foreach (var exit in rooms[current.ID].exits)
             {
-                Console.Error.WriteLine(current.BestPath + " " + current.BestCash);
-                return current.BestCash;
-            }
-            else
-            {
-                Console.Error.WriteLine($"Recursing from room {roomNumber}: EvaluateRoom({exit}, {current.BestPath}, {current.BestCash})");
-                bestCash = Math.Max(bestCash, EvaluateRoom(exit, current.BestPath, current.BestCash));
+                if (roomPath.path.Contains(exit))
+                {
+//                    Console.Error.WriteLine($"Duplicate room found from {current.ID} to {exit}");
+                    continue;
+                }
+
+                if (exit < 0)
+                {
+//                    Console.Error.WriteLine($"Found outside exit.  Checking {roomPath}");
+                    bestCash = Math.Max(bestCash, roomPath.cash);
+                }
+                else
+                {
+                    var newRoomPath = new RoomPath(exit, roomPath.path, rooms[exit].Cash + roomPath.cash);
+//                    Console.Error.WriteLine($"Queueing exit from room {current.ID}: {newRoomPath}");
+                    process.Enqueue(newRoomPath);
+                }
             }
         }
 
@@ -72,14 +85,17 @@ class Solution
 
     static void Main(string[] args)
     {
-        int N = int.Parse(Console.ReadLine());
+        string input = Console.ReadLine();
+        Console.Error.WriteLine(input);
+        int N = int.Parse(input);
         for (int i = 0; i < N; i++)
         {
-            var room = new Room(Console.ReadLine());
+            input = Console.ReadLine();
+            Console.Error.WriteLine(input);
+            var room = new Room(input);
             rooms.Add(room.ID, room);
         }
 
-
-        Console.WriteLine(EvaluateRoom(0, string.Empty, 0));
+        Console.WriteLine(EvaluateRoom(0));
     }
 }
