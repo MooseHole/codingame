@@ -10,6 +10,8 @@ class Room
     public int ID;
     public int Cash;
     public int[] exits = new int[2];
+    public bool Visited;
+    public int BestCash;
 
     public Room(string initializer)
     {
@@ -18,6 +20,11 @@ class Room
         Cash = int.Parse(attributes[1]);
         exits[0] = attributes[2] == "E" ? -1 : int.Parse(attributes[2]);
         exits[1] = attributes[3] == "E" ? -1 : int.Parse(attributes[3]);
+    }
+
+    public void Deposit(int fromRoomAmount)
+    {
+        BestCash = Math.Max(BestCash, fromRoomAmount + Cash);
     }
 }
 
@@ -51,37 +58,44 @@ class Solution
 
     static int EvaluateRoom(int initialRoom)
     {
-        Queue<RoomPath> process = new Queue<RoomPath>();
+        Queue<int> process = new Queue<int>();
         HashSet<int> initialPath = new HashSet<int>() { initialRoom };
         var initialRoomPath = new RoomPath(initialRoom, initialPath, rooms[initialRoom].Cash);
         Console.Error.WriteLine($"Queueing initial room: {initialRoomPath}");
-        process.Enqueue(initialRoomPath);
+        rooms[initialRoom].Deposit(0);
+        process.Enqueue(initialRoom);
 
         int bestCash = -1;
         while (process.Any())
         {
-            RoomPath roomPath = process.Dequeue();
-
-            foreach (var exit in rooms[roomPath.room].exits)
+            int currentRoomNum = process.Dequeue();
+            if (rooms[currentRoomNum].Visited)
             {
-                if (roomPath.Contains(exit))
+                continue;
+            }
+
+            foreach (var exit in rooms[currentRoomNum].exits)
+            {
+                if (rooms[currentRoomNum].Visited)
                 {
-                    Console.Error.WriteLine($"Duplicate room found from {roomPath.room} to {exit}");
+                    Console.Error.WriteLine($"Duplicate room found from {currentRoomNum} to {exit}");
                     continue;
                 }
 
                 if (exit < 0)
                 {
-                    Console.Error.WriteLine($"Found outside exit.  Checking {roomPath}");
-                    bestCash = Math.Max(bestCash, roomPath.cash);
+                    Console.Error.WriteLine($"Found outside exit from {currentRoomNum}.  Checking {rooms[currentRoomNum].BestCash}");
+                    bestCash = Math.Max(bestCash, rooms[currentRoomNum].BestCash);
                 }
                 else
                 {
-                    var newRoomPath = new RoomPath(exit, roomPath.path, rooms[exit].Cash + roomPath.cash);
-                    Console.Error.WriteLine($"Queueing exit from room {roomPath.room}: {newRoomPath}");
-                    process.Enqueue(newRoomPath);
+                    Console.Error.WriteLine($"Queueing exit from room {currentRoomNum}: {exit}");
+                    rooms[exit].Deposit(rooms[currentRoomNum].BestCash);
+                    process.Enqueue(exit);
                 }
             }
+
+            rooms[currentRoomNum].Visited = true;
         }
 
         return bestCash;
