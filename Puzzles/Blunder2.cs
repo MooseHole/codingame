@@ -24,7 +24,12 @@ class Room
 
     public void Deposit(int fromRoomAmount)
     {
-        BestCash = Math.Max(BestCash, fromRoomAmount + Cash);
+        int newAmount = fromRoomAmount + Cash;
+        if (newAmount > BestCash)
+        {
+            BestCash = newAmount;
+            Visited = false;
+        }
     }
 }
 
