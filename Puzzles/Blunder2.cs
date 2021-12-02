@@ -48,13 +48,22 @@ class Solution
             {
                 if (exit >= 0)
                 {
+                    // Deposit current path's cash.  May cause un-visit!
                     Console.Error.WriteLine($"Depositing {rooms[currentRoomNum].BestCash} from {currentRoomNum} to {exit}");
                     rooms[exit].Deposit(rooms[currentRoomNum].BestCash);
                 }
             }
 
+            // Mark self visited
             rooms[currentRoomNum].Visited = true;
-            currentRoomNum = rooms.Values.Where(r => !r.Visited).OrderByDescending(r => r.BestCash).FirstOrDefault()?.ID ?? -1;
+
+            // Find unvisited room with highest amount of cash in its previous path
+            currentRoomNum = -1;
+            var unvisitedRooms = rooms.Values.Where(r => !r.Visited);
+            if ((unvisitedRooms != null) && unvisitedRooms.Any())
+            {
+                currentRoomNum = unvisitedRooms.Aggregate((agg, next) => next.BestCash > agg.BestCash ? next : agg)?.ID ?? -1;
+            }
         } while (currentRoomNum >= 0);
 
         return rooms.Values.Max(r => r.BestCash);
