@@ -34,6 +34,11 @@ struct RoomPath
         this.cash = cash;
     }
 
+    public bool Contains(int roomNumber)
+    {
+        return path.Contains(roomNumber);
+    }
+
     public override string ToString()
     {
         return $"RoomPath room {room} path {string.Join("-", path)} cash ${cash}";
@@ -56,25 +61,24 @@ class Solution
         while (process.Any())
         {
             RoomPath roomPath = process.Dequeue();
-            var current = rooms[roomPath.room];
 
-            foreach (var exit in rooms[current.ID].exits)
+            foreach (var exit in rooms[roomPath.room].exits)
             {
-                if (roomPath.path.Contains(exit))
+                if (roomPath.Contains(exit))
                 {
-//                    Console.Error.WriteLine($"Duplicate room found from {current.ID} to {exit}");
+                    Console.Error.WriteLine($"Duplicate room found from {roomPath.room} to {exit}");
                     continue;
                 }
 
                 if (exit < 0)
                 {
-//                    Console.Error.WriteLine($"Found outside exit.  Checking {roomPath}");
+                    Console.Error.WriteLine($"Found outside exit.  Checking {roomPath}");
                     bestCash = Math.Max(bestCash, roomPath.cash);
                 }
                 else
                 {
                     var newRoomPath = new RoomPath(exit, roomPath.path, rooms[exit].Cash + roomPath.cash);
-//                    Console.Error.WriteLine($"Queueing exit from room {current.ID}: {newRoomPath}");
+                    Console.Error.WriteLine($"Queueing exit from room {roomPath.room}: {newRoomPath}");
                     process.Enqueue(newRoomPath);
                 }
             }
