@@ -42,10 +42,10 @@ class Solution
         var roomString = "[" + roomNumber + "]";
 
         Room current = rooms[roomNumber];
-        string thisPath = path + roomString;
         int myPathCash = current.Cash + pathCash;
-        current.DespositCash(myPathCash, thisPath);
+        current.DespositCash(myPathCash, path + roomString);
 
+        int bestCash = -1;
         foreach (var exit in rooms[roomNumber].exits)
         {
             var exitString = "[" + exit + "]";
@@ -62,12 +62,12 @@ class Solution
             }
             else
             {
-                Console.Error.WriteLine($"Recursing from room {roomNumber}: EvaluateRoom({exit}, {thisPath}, {current.BestCash})");
-                return EvaluateRoom(exit, thisPath, current.BestCash);
+                Console.Error.WriteLine($"Recursing from room {roomNumber}: EvaluateRoom({exit}, {current.BestPath}, {current.BestCash})");
+                bestCash = Math.Max(bestCash, EvaluateRoom(exit, current.BestPath, current.BestCash));
             }
         }
 
-        return -1;
+        return bestCash;
     }
 
     static void Main(string[] args)
