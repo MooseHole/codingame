@@ -71,9 +71,11 @@ class Solution
             int currentRoomNum = process.Dequeue();
             if (rooms[currentRoomNum].Visited)
             {
+                Console.Error.WriteLine($"Already visited {currentRoomNum}");
                 continue;
             }
 
+            Dictionary<int, int> exitBestCash = new Dictionary<int, int>();
             foreach (var exit in rooms[currentRoomNum].exits)
             {
                 if (rooms[currentRoomNum].Visited)
@@ -89,10 +91,28 @@ class Solution
                 }
                 else
                 {
-                    Console.Error.WriteLine($"Queueing exit from room {currentRoomNum}: {exit}");
+                    Console.Error.WriteLine($"Queueing exit from room {currentRoomNum}: {exit} and depositing {rooms[currentRoomNum].BestCash}");
                     rooms[exit].Deposit(rooms[currentRoomNum].BestCash);
-                    process.Enqueue(exit);
+                    exitBestCash.Add(exit, rooms[exit].BestCash);
                 }
+            }
+
+            if (exitBestCash.Count == 2)
+            {
+                if (exitBestCash.First().Value > exitBestCash.Last().Value)
+                {
+                    process.Enqueue(exitBestCash.First().Key);
+                    process.Enqueue(exitBestCash.Last().Key);
+                }
+                else
+                {
+                    process.Enqueue(exitBestCash.Last().Key);
+                    process.Enqueue(exitBestCash.First().Key);
+                }
+            }
+            else if (exitBestCash.Count == 1)
+            {
+                process.Enqueue(exitBestCash.First().Key);
             }
 
             rooms[currentRoomNum].Visited = true;
