@@ -10,7 +10,6 @@ class Room
     public int ID;
     public int Cash;
     public int[] exits = new int[2];
-    public bool Visited;
     public int BestCash;
 
     public Room(string initializer)
@@ -22,14 +21,16 @@ class Room
         exits[1] = attributes[3] == "E" ? -1 : int.Parse(attributes[3]);
     }
 
-    public void Deposit(int fromRoomAmount)
+    public bool Deposit(int fromRoomAmount)
     {
         int newAmount = fromRoomAmount + Cash;
         if (newAmount > BestCash)
         {
             BestCash = newAmount;
-            Visited = false;
+            return true;
         }
+
+        return false;
     }
 }
 
@@ -41,6 +42,8 @@ class Solution
     {
         int currentRoomNum = initialRoom;
         rooms[initialRoom].Deposit(0);
+        Stack<int> roomStack = new Stack<int>();
+        roomStack.Push(currentRoomNum);
 
         do
         {
@@ -48,21 +51,19 @@ class Solution
             {
                 if (exit >= 0)
                 {
-                    // Deposit current path's cash.  May cause un-visit!
-                    Console.Error.WriteLine($"Depositing {rooms[currentRoomNum].BestCash} from {currentRoomNum} to {exit}");
-                    rooms[exit].Deposit(rooms[currentRoomNum].BestCash);
+                    // Deposit current path's cash into the exit.
+                    // If the amount was updated, process the exit
+                    if (rooms[exit].Deposit(rooms[currentRoomNum].BestCash))
+                    {
+                        roomStack.Push(exit);
+                    }
                 }
             }
 
-            // Mark self visited
-            rooms[currentRoomNum].Visited = true;
-
-            // Find unvisited room with highest amount of cash in its previous path
             currentRoomNum = -1;
-            var unvisitedRooms = rooms.Values.Where(r => !r.Visited);
-            if ((unvisitedRooms != null) && unvisitedRooms.Any())
+            if (roomStack.Any())
             {
-                currentRoomNum = unvisitedRooms.Aggregate((agg, next) => next.BestCash > agg.BestCash ? next : agg)?.ID ?? -1;
+                currentRoomNum = roomStack.Pop();
             }
         } while (currentRoomNum >= 0);
 
