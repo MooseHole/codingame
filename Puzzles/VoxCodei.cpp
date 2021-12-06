@@ -2,33 +2,25 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <map>
+#include <set>
+
+#define ECHO_INPUT true
 
 using namespace std;
 
-#define BOMB_DETONATION_TIME	3
-#define BOMB_RANGE	3
-#define SIMULATION_TIME 0.095
-
-enum Direction
-{
-	UNKNOWN,
-	VERTICAL,
-	HORIZONTAL,
-	NONE
-};
-
 class Coordinate
 {
-	public:
+public:
 	int x;
 	int y;
-	
+
 	Coordinate()
 	{
 		x = 0;
 		y = 0;
 	}
-	
+
 	Coordinate(int _x, int _y)
 	{
 		x = _x;
@@ -39,12 +31,13 @@ class Coordinate
 	{
 		x = other.x;
 		y = other.y;
+		return *this;
 	}
 
-    bool operator==(const Coordinate& other) const
-    {
-        return x == other.x && y == other.y;
-    }
+	bool operator==(const Coordinate& other) const
+	{
+		return x == other.x && y == other.y;
+	}
 
 	Coordinate operator+(const Coordinate& other)
 	{
@@ -68,734 +61,401 @@ class Coordinate
 		return *this;
 	}
 
+	bool operator <(const Coordinate& other) const
+	{
+		if (x < other.x)
+		{
+			return true;
+		}
+
+		if (x > other.x)
+		{
+			return false;
+		}
+		
+		if (y < other.y)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
 	bool inBounds(Coordinate corner)
 	{
 		return x >= 0 && y >= 0 && x <= corner.x && y <= corner.y;
 	}
 
-	friend ostream &operator<<(ostream &os, Coordinate const &m)
+	string GetOutput()
+	{
+		return to_string(x) + " " + to_string(y);
+	}
+
+	friend ostream& operator<<(ostream& os, Coordinate const& m)
 	{
 		return os << "(" << m.x << "," << m.y << ")";
 	}
 };
 
-static minstd_rand randomEngine(clock());
-class Grid;
-class Bomb;
-class Node;
-Coordinate floorCorner;
-vector<vector<char>> nodeFloor;
-double turnStartTime;
-
-class Movement
-{
-	public:
-	Coordinate location;
-	Direction direction;
-	Coordinate movement;
-	Coordinate nextLocation;
-	bool possible;
-	
-	Movement(){}
-	
-	Movement(Coordinate _location, Direction _direction, Coordinate _movement)
-	{
-		location = _location;
-		direction = _direction;
-		movement = _movement;
-		nextLocation = location + movement;
-		possible = nextLocation.inBounds(floorCorner) && nodeFloor[nextLocation.x][nextLocation.y] != '#';
-		updateNextLocation();
-	}
-	
-	Movement& operator=(const Movement& other)
-	{
-		location = other.location;
-		direction = other.direction;
-		movement = other.movement;
-		nextLocation = other.nextLocation;
-		possible = other.possible;
-	}
-	
-	void updateNextLocation()
-	{
-		if (possible)
-		{
-			nextLocation = location + movement;
-			if (!nextLocation.inBounds(floorCorner) || nodeFloor[nextLocation.x][nextLocation.y] == '#')
-			{
-				movement *= Coordinate(-1, -1);	// Flip direction
-				nextLocation = location + movement;
-			}
-		}
-	}
-
-	void tick(bool compare = true)
-	{
-		if (possible)
-		{
-			location = nextLocation;
-	
-			if (compare && nodeFloor[nextLocation.x][nextLocation.y] != '@')
-			{
-				possible = false;
-			}
-
-			updateNextLocation();
-		}		
-	}
-};
-
-class Node
-{
-	public:
-	bool destroyed;
-	Movement movementUp, movementDown, movementLeft, movementRight, movementStationary;
-	Movement movementConfirmed;
-	Coordinate previousLocation;
-	
-	Node(){}
-	
-	Node(int x, int y)
-	{
-		destroyed = false;
-		Coordinate location = Coordinate(x, y);
-		movementUp = Movement(location, Direction::VERTICAL, Coordinate(0, -1));
-		movementDown = Movement(location, Direction::VERTICAL, Coordinate(0, 1));
-		movementLeft = Movement(location, Direction::HORIZONTAL, Coordinate(-1, 0));
-		movementRight = Movement(location, Direction::HORIZONTAL, Coordinate(1, 0));
-		movementStationary = Movement(location, Direction::NONE, Coordinate(0, 0));
-		movementConfirmed = movementStationary;
-		movementUp.possible = false;
-		movementDown.possible = false;
-		movementRight.possible = false;
-		movementUp.possible = false;
-		previousLocation = location;
-	}
-	
-	Node& operator=(const Node& other)
-	{
-		destroyed = other.destroyed;
-		movementUp = other.movementUp;
-		movementDown = other.movementDown;
-		movementLeft = other.movementLeft;
-		movementRight = other.movementRight;
-		movementStationary = other.movementStationary;
-		movementConfirmed = other.movementConfirmed;
-		previousLocation = other.previousLocation;
-	}
-	
-	bool isDirectionKnown() const
-	{
-		return movementConfirmed.possible;
-	}
-	
-	Coordinate location() const
-	{
-		if (movementConfirmed.possible)
-		{
-			return movementConfirmed.location;
-		}
-		
-		return Coordinate(-1,-1);
-	}
-	
-	Coordinate nextLocation() const
-	{
-		if (movementConfirmed.possible)
-		{
-			return movementConfirmed.nextLocation;
-		}
-		
-		return Coordinate(-1,-1);
-	}
-	
-	Coordinate prevLocation() const
-	{
-		if (movementConfirmed.possible)
-		{
-			return previousLocation;
-		}
-		
-		return Coordinate(-1,-1);
-	}
-	
-	bool tick()
-	{
-		if (movementConfirmed.possible)
-		{
-			previousLocation = location();
-			movementConfirmed.tick(false);
-		}
-		else
-		{
-			movementUp.tick();
-			movementDown.tick();
-			movementLeft.tick();
-			movementRight.tick();
-			movementStationary.tick();
-
-			int possibleDirections = 0;
-			
-			if (movementUp.possible)
-			{
-				movementConfirmed = movementUp;
-				possibleDirections++;
-			}
-			
-			if (movementDown.possible)
-			{
-				movementConfirmed = movementDown;
-				possibleDirections++;
-			}
-			
-			if (movementLeft.possible)
-			{
-				movementConfirmed = movementLeft;
-				possibleDirections++;
-			}
-			
-			if (movementRight.possible)
-			{
-				movementConfirmed = movementRight;
-				possibleDirections++;
-			}
-			
-			if (movementStationary.possible)
-			{
-				movementConfirmed = movementStationary;
-				possibleDirections++;
-			}
-
-			movementConfirmed.possible = (possibleDirections == 1);
-		}
-	}
-	
-	string directionString() const
-	{
-		if (!movementConfirmed.possible)
-		{
-			return "?";
-		}
-		else if (movementConfirmed.movement == Coordinate(-1, 0))
-		{
-			return "<";
-		}
-		else if (movementConfirmed.movement == Coordinate(1, 0))
-		{
-			return ">";
-		}
-		else if (movementConfirmed.movement == Coordinate(0, -1))
-		{
-			return "^";
-		}
-		else if (movementConfirmed.movement == Coordinate(0, 1))
-		{
-			return "v";
-		}
-		else
-		{
-			return "+";
-		}
-	}
-
-	friend ostream &operator<<(ostream &os, Node const &m)
-	{
-		return os << "[" << m.location() << m.directionString() << (m.destroyed ? "." : "@") << (m.movementUp.possible ? "U" : "") << (m.movementDown.possible ? "D" : "") << (m.movementLeft.possible ? "L" : "") << (m.movementRight.possible ? "R" : "") << (m.movementStationary.possible ? "S" : "") << "]";
-	}
-};
-
 class Bomb
 {
-	public:
-	Coordinate location;
-	int timeToDetonation;
-	bool destroyed;
-	bool exploding;
-	vector<Coordinate> detonationRange;
-	
-	Bomb(){}
-	
-	Bomb(int x, int y)
+public:
+	Coordinate Location;
+	int TurnExploding;
+
+	Bomb() : Bomb(Coordinate(-10, -10), 0)
 	{
-		destroyed = false;
-		exploding = false;
-		location.x = x;
-		location.y = y;
-		timeToDetonation = BOMB_DETONATION_TIME;
-		
-		detonationRange.push_back(location);
-		for (int detonationX = location.x; detonationX >= 0 && detonationX > location.x-BOMB_RANGE; detonationX--)
-		{
-			if (nodeFloor[detonationX][location.y] == '#')
-			{
-				break;
-			}
-			
-			detonationRange.push_back(Coordinate(detonationX, location.y));
-		}
-		for (int detonationX = location.x; detonationX <= floorCorner.x && detonationX < location.x+BOMB_RANGE; detonationX++)
-		{
-			if (nodeFloor[detonationX][location.y] == '#')
-			{
-				break;
-			}
-			
-			detonationRange.push_back(Coordinate(detonationX, location.y));
-		}
-		for (int detonationY = location.y; detonationY >= 0 && detonationY > location.y-BOMB_RANGE; detonationY--)
-		{
-			if (nodeFloor[location.x][detonationY] == '#')
-			{
-				break;
-			}
-			
-			detonationRange.push_back(Coordinate(location.x, detonationY));
-		}
-		for (int detonationY = location.y; detonationY <= floorCorner.y && detonationY < location.y+BOMB_RANGE; detonationY++)
-		{
-			if (nodeFloor[location.x][detonationY] == '#')
-			{
-				break;
-			}
-			
-			detonationRange.push_back(Coordinate(location.x, detonationY));
-		}
+	}
+
+	Bomb(Coordinate location, int roundsRemaining) :
+		Location(location),
+		TurnExploding(roundsRemaining - 3)
+	{
 	}
 
 	Bomb& operator=(const Bomb& other)
 	{
-		location = other.location;
-		timeToDetonation = other.timeToDetonation;
-		destroyed = other.destroyed;
-		exploding = other.exploding;
-		for (vector<Coordinate>::const_iterator it = other.detonationRange.begin(); it != other.detonationRange.end(); ++it)
-		{
-			detonationRange.push_back(*it);
-		}
-	}
-
-	bool tick()
-	{
-		exploding = false;
-		timeToDetonation--;
-		if (!destroyed && timeToDetonation <= 0)
-		{
-			return true;
-		}
-		
-		return false;
-	}
-	
-	bool kaboom()
-	{
-		if (!destroyed)
-		{
-			destroyed = true;
-			exploding = true;
-			return true;
-		}
-		
-		return false;
-	}
-
-	friend ostream &operator<<(ostream &os, Bomb const &m)
-	{
-		return os << "{" << m.location << m.timeToDetonation << (m.destroyed ? "." : "O") << (m.exploding ? "BOOM" : "") << "}";
+		Location = other.Location;
+		TurnExploding = other.TurnExploding;
+		return *this;
 	}
 };
 
-class Grid
+class Surveillance
 {
-	public:
-	vector<Bomb> bombs;
-	vector<Node> nodes;
-	vector<Coordinate> detonations;
-	vector<Coordinate> placements;
-	
-	Grid(){}
-	
-	Grid(int width, int height)
+public:
+	Coordinate Location;
+
+	Surveillance(Coordinate location) : Location(location)
 	{
-		floorCorner = Coordinate(width-1, height-1);
-		for (int x = 0; x < width; ++x)
-		{
-			vector<char> column;
-			column.resize(height, '.');
-			nodeFloor.push_back(column);
-		}
+	}
+};
+
+class Passive
+{
+public:
+	Coordinate Location;
+
+	Passive(Coordinate location) : Location(location)
+	{
+	}
+};
+
+class Firewall
+{
+public:
+
+	Firewall(int w, int h) : width(w), height(h)
+	{
 	}
 
-	Grid& operator=(const Grid& other)
+	Firewall& operator=(const Firewall& other)
 	{
-		for (vector<Coordinate>::const_iterator it = other.detonations.begin(); it != other.detonations.end(); ++it)
-		{
-			detonations.push_back(*it);
-		}
-		for (vector<Node>::const_iterator it = other.nodes.begin(); it != other.nodes.end(); ++it)
-		{
-			nodes.push_back(*it);
-		}
-		for (vector<Bomb>::const_iterator it = other.bombs.begin(); it != other.bombs.end(); ++it)
-		{
-			bombs.push_back(*it);
-		}
-		for (vector<Coordinate>::const_iterator it = other.placements.begin(); it != other.placements.end(); ++it)
-		{
-			placements.push_back(*it);
-		}
+		surveillanceNodes = other.surveillanceNodes;
+		passiveNodes = other.passiveNodes;
+		bombs = other.bombs;
+		simulatorBombLocations = other.simulatorBombLocations;
+		return *this;
 	}
 
-	void update(int row, string input)
+	void AddSurveillance(Coordinate location)
 	{
-		for (int x = 0; x <= floorCorner.x; ++x)
+		surveillanceNodes.insert(location);
+	}
+
+	void AddPassive(Coordinate location)
+	{
+		passiveNodes.insert(location);
+	}
+
+	void AddBomb(Coordinate location, int roundsRemaining)
+	{
+		bombs[location] = Bomb(location, roundsRemaining);
+	}
+
+	bool CanPlaceBomb(Coordinate location)
+	{
+		return !AnythingExists(location) && BombMightHitSomething(location);
+	}
+
+	void SetRound(int round)
+	{
+		vector<Coordinate> explodeNow;
+
+		// Figure out what gets blown up
+		for (const auto& bomb : bombs)
 		{
-			nodeFloor[x][row] = input[x];
-			
-			if (input[x] == '@')
+			if (bomb.second.TurnExploding == round)
 			{
-				nodes.push_back(Node(x, row));
+				explodeNow.push_back(bomb.first);
 			}
 		}
-	}
-	
-	int remainingActiveNodes() const
-	{
-		int remaining = 0;
 
-		for (vector<Node>::const_iterator node = nodes.begin(); node != nodes.end(); ++node)
-		{
-			if (!(*node).destroyed)
-			{
-				remaining++;
-			}
-		}
-		
-		return remaining;
+		ExplodeBombs(explodeNow);
 	}
-	
-	bool anyUnknownNodes() const
+
+	bool Simulate(int round, int bombsLeft)
 	{
-		for (vector<Node>::const_iterator node = nodes.begin(); node != nodes.end(); ++node)
+		SetRound(round);
+
+		// This is the end of the game
+		if (round == 1)
 		{
-			if (!(*node).isDirectionKnown())
+			return surveillanceNodes.size() <= 0;
+		}
+
+		if (bombsLeft <= 0)
+		{
+			if (bombs.size() == 0)
+			{
+				return false;
+			}
+
+			return Simulate(round - 1, bombsLeft);
+		}
+
+		for (Coordinate location : simulatorBombLocations)
+		{
+			Firewall check = *this;
+			check.AddBomb(location, round);
+
+			if (check.Simulate(round - 1, bombsLeft - 1))
 			{
 				return true;
 			}
 		}
-		
+
+		Firewall checkWait = *this;
+		if (checkWait.Simulate(round - 1, bombsLeft))
+		{
+			return true;
+		}
+
 		return false;
 	}
-	
-	void updateBombs()
+
+	string Simulator(int round, int bombsLeft)
 	{
-		bool anyKaboom = false;
-		detonations.clear();
-
-		// Check any timewise explosions
-		for (vector<Bomb>::iterator bomb = bombs.begin(); bomb != bombs.end(); ++bomb)
+		if (bombsLeft <= 0)
 		{
-			if ((*bomb).tick())
-			{
-				for (vector<Coordinate>::iterator det = (*bomb).detonationRange.begin(); det != (*bomb).detonationRange.end(); ++det)
-				{
-					detonations.push_back(*det);
-				}
-
-				(*bomb).kaboom();
-				anyKaboom = true;
-			}
+			return "WAIT";
 		}
 
-		// Check any chain explosions
-		while (anyKaboom)
+		SetRound(round);
+
+		for (int x = 0; x < width; x++)
 		{
-			anyKaboom = false;
-			for (vector<Bomb>::iterator bomb = bombs.begin(); bomb != bombs.end(); ++bomb)
+			for (int y = 0; y < height; y++)
 			{
-				if (!(*bomb).destroyed)
+				Coordinate location(x, y);
+
+				if (CanPlaceBomb(location) && BombMightHitSomething(location))
 				{
-					bool thisBombChained = false;
-
-					for (vector<Coordinate>::iterator detLocation = detonations.begin(); detLocation != detonations.end(); ++detLocation)
-					{
-						if ((*bomb).location == (*detLocation))
-						{
-							thisBombChained = true;
-							break;
-						}
-					}
-					
-					if (thisBombChained)
-					{
-						for (vector<Coordinate>::iterator det = (*bomb).detonationRange.begin(); det != (*bomb).detonationRange.end(); ++det)
-						{
-							detonations.push_back(*det);
-						}
-
-						(*bomb).kaboom();
-						anyKaboom = true;
-					}
+					simulatorBombLocations.insert(location);
 				}
 			}
 		}
-	}
-	
-	void destroyNodes()
-	{
-		for (vector<Node>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+
+		// check each location, simulate next round, check done, check each location, simulate each round, check done, 
+		for (Coordinate location : simulatorBombLocations)
 		{
-			if ((*node).destroyed)
-			{
-				continue;
-			}
+			Firewall check = *this;
+			check.AddBomb(location, round);
 
-			Coordinate oldLocation = (*node).location();
-
-			for (vector<Coordinate>::iterator detLocation = detonations.begin(); detLocation != detonations.end(); ++detLocation)
+			if (check.Simulate(round - 1, bombsLeft - 1))
 			{
-				if (oldLocation == (*detLocation))
-				{
-					(*node).destroyed = true;
-					break;
-				}
+				AddBomb(location, round);
+				return location.GetOutput();
 			}
 		}
+
+		return "WAIT";
 	}
 
-	void moveNodes()
+private:
+	set<Coordinate> surveillanceNodes;
+	set<Coordinate> passiveNodes;
+	map<Coordinate, Bomb> bombs;
+	set<Coordinate> simulatorBombLocations;
+	int width = 0;
+	int height = 0;
+	const vector<Coordinate> blastLocations{
+		Coordinate(-1, 0),  Coordinate(-2, 0),  Coordinate(-3, 0),
+		Coordinate(1, 0),  Coordinate(2, 0),  Coordinate(3, 0),
+		Coordinate(0, -1),  Coordinate(0, -2),  Coordinate(0, -3),
+		Coordinate(0, 1),  Coordinate(0, 2),  Coordinate(0, 3)
+	};
+
+	bool BombMightHitSomething(Coordinate Location)
 	{
-		// Move active nodes
-		for (vector<Node>::iterator node = nodes.begin(); node != nodes.end(); ++node)
+		vector<Coordinate> blast;
+		for (Coordinate blastLocation : blastLocations)
 		{
-			if ((*node).destroyed)
+			if (SurveillanceExists(Location + blastLocation))
 			{
-				continue;
+				return true;
 			}
-
-			(*node).tick();
 		}
+
+		return false;
 	}
-	
-	void tick()
+
+	bool ExplodeLocation(Coordinate location)
 	{
-		updateBombs();
-		destroyNodes();
-		moveNodes();
-	}
-	
-	bool placeBomb(Coordinate place)
-	{
-		if (nodeFloor[place.x][place.y] == '#')
+		if (PassiveExists(location))
 		{
 			return false;
 		}
 
-		for (vector<Node>::iterator node = nodes.begin(); node != nodes.end(); ++node)
-		{
-			if (
-				false
-//			 ||	((*node).location() == place)
-//			 || ((*node).nextLocation() == place)
-			 || ((*node).prevLocation() == place)
-				)
-			{
-				return false;
-			}
-		}
-		
-		bombs.push_back(Bomb(place.x, place.y));
-		placements.push_back(place);
+		surveillanceNodes.erase(location);
+		simulatorBombLocations.insert(location);
 		return true;
 	}
-	
-	void placeWait()
+
+	vector<Coordinate> Explode(Coordinate location)
 	{
-		placements.push_back(Coordinate(-1,-1));
-	}
+		vector<Coordinate> otherBombs;
 
-	friend ostream &operator<<(ostream &os, Grid const &m)
-	{
-		for (vector<Bomb>::const_iterator bomb = m.bombs.begin(); bomb != m.bombs.end(); ++bomb)
+		// North
+		for (int y = -1; y >= -3; y--)
 		{
-			os << (*bomb);
-		}
-		for (vector<Node>::const_iterator node = m.nodes.begin(); node != m.nodes.end(); ++node)
-		{
-			os << (*node);
-		}
-		os << endl;
-
-		for (int y = 0; y <= floorCorner.y; y++)
-		{
-			for (int x = 0; x <= floorCorner.x; x++)
+			if (!ExplodeLocation(Coordinate(location.x, location.y + y)))
 			{
-				bool showBomb = false;
-				bool showNode = false;
-
-				for (vector<Bomb>::const_iterator bomb = m.bombs.begin(); bomb != m.bombs.end(); ++bomb)
-				{
-					if (!(*bomb).destroyed && (*bomb).location.x == x && (*bomb).location.y == y)
-					{
-						os << (*bomb).timeToDetonation;
-						showBomb = true;
-						break;
-					}
-				}
-				
-				if (!showBomb)
-				{
-					for (vector<Node>::const_iterator node = m.nodes.begin(); node != m.nodes.end(); ++node)
-					{
-						if (!(*node).destroyed && (*node).location().x == x && (*node).location().y == y)
-						{
-							os << (*node).directionString();
-							showNode = true;
-							break;
-						}
-					}
-				}
-				
-				if (!showBomb && !showNode)
-				{
-					os << nodeFloor[x][y];
-				}
-			}
-			os << endl;
-		}
-		
-		os << "--------------------" << endl;
-
-		for (int y = 0; y <= floorCorner.y; y++)
-		{
-			for (int x = 0; x <= floorCorner.x; x++)
-			{
-				os << nodeFloor[x][y];
-			}
-			os << endl;
-		}
-
-		
-		return os;
-	}
-
-};
-
-Grid grid;
-
-void simulate(int rounds, int bombs, double deadline)
-{
-	if (grid.anyUnknownNodes())
-	{
-		return;
-	}
-
-	uniform_int_distribution<int> randomPlace{0, 1};
-	uniform_int_distribution<int> randomX{0, floorCorner.x};
-	uniform_int_distribution<int> randomY{0, floorCorner.y};
-
-	Coordinate placeLocation;
-	int iterations = 0;
-	int currentPlacements = grid.placements.size();
-	int minimumCompletion = (currentPlacements > 0) ? currentPlacements : rounds;
-
-if (currentPlacements > 0)
-{
-	// Don't try to do better
-	return;
-}
-	
-	while (clock() < deadline)
-	{
-		iterations++;
-		Grid simGrid = grid;
-		int remainingBombs = bombs;
-		simGrid.placements.clear();
-		
-		for (int tick = 0; tick < rounds; ++tick)
-		{
-			simGrid.tick();
-
-			bool place = randomPlace(randomEngine) > 0;
-			if (place && remainingBombs > 0)
-			{
-				do
-				{
-					placeLocation = Coordinate(randomX(randomEngine), randomY(randomEngine));
-				} while (!simGrid.placeBomb(placeLocation));
-
-				remainingBombs--;
-			}
-			else
-			{
-				simGrid.placeWait();
-			}
-
-			if (!simGrid.remainingActiveNodes())
-			{
-				if (minimumCompletion > tick)
-				{
-					minimumCompletion = tick;
-					grid.placements.clear();
-					for (vector<Coordinate>::iterator it = simGrid.placements.begin(); it != simGrid.placements.end(); ++it)
-					{
-						grid.placements.push_back(*it);
-					}
-				}
-				
 				break;
 			}
 		}
+
+		// East
+		for (int x = 1; x <= 3; x++)
+		{
+			if (!ExplodeLocation(Coordinate(location.x + x, location.y)))
+			{
+				break;
+			}
+		}
+
+		// South
+		for (int y = 1; y <= 3; y++)
+		{
+			if (!ExplodeLocation(Coordinate(location.x, location.y + y)))
+			{
+				break;
+			}
+		}
+
+		// West
+		for (int x = -1; x >= -3; x--)
+		{
+			if (!ExplodeLocation(Coordinate(location.x + x, location.y)))
+			{
+				break;
+			}
+		}
+
+		return otherBombs;
 	}
 
-	cerr << iterations << " " << turnStartTime << " " << clock() << " " << deadline << " " << (double)CLOCKS_PER_SEC << " " << grid.placements.size() << endl;
-}
+	void ExplodeBombs(vector<Coordinate> explodeNow)
+	{
+		if (explodeNow.size() < 1)
+		{
+			return;
+		}
 
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
+		vector<Coordinate> cascade;
+
+		// Explode the bombs
+		for (Coordinate bomb : explodeNow)
+		{
+			if (!BombExists(bomb))
+			{
+				continue;
+			}
+
+			vector<Coordinate> otherBombs = Explode(bomb);
+
+			// Save any bombs that just got hit by the blast
+			cascade.insert(cascade.end(), otherBombs.begin(), otherBombs.end());
+		}
+
+		// Remove all that just directly blew up
+		for (Coordinate remove : explodeNow)
+		{
+			bombs.erase(remove);
+		}
+
+		ExplodeBombs(cascade);
+	}
+
+	bool PassiveExists(Coordinate location)
+	{
+		return passiveNodes.find(location) != passiveNodes.end();
+	}
+
+	bool SurveillanceExists(Coordinate location)
+	{
+		return surveillanceNodes.find(location) != surveillanceNodes.end();
+	}
+
+	bool BombExists(Coordinate location)
+	{
+		auto search = bombs.find(location);
+		if (search == bombs.end())
+		{
+			return false;
+		}
+
+		return true;
+	}
+
+	bool AnythingExists(Coordinate location)
+	{
+		return BombExists(location) || SurveillanceExists(location) || PassiveExists(location);
+	}
+};
+
 int main()
 {
     int width; // width of the firewall grid
     int height; // height of the firewall grid
     cin >> width >> height; cin.ignore();
-	grid = Grid(width, height);
+#ifdef ECHO_INPUT
+	cerr << width << " " << height << endl;
+#endif
 
+	Firewall mainFirewall(width, height);
+	
 	for (int i = 0; i < height; i++)
 	{
-		string mapRow; // one line of the firewall grid
-		getline(cin, mapRow);
-		grid.update(i, mapRow);
-	}
+        string map_row;
+        getline(cin, map_row); // one line of the firewall grid
+#ifdef ECHO_INPUT
+		cerr << map_row << endl;
+#endif
+		for (int j = 0; j < width; j++)
+		{
+			switch (map_row[j])
+			{
+			case '@':
+				mainFirewall.AddSurveillance(Coordinate(j, i));
+				break;
+			case '#':
+				mainFirewall.AddPassive(Coordinate(j, i));
+				break;
+			default:
+				break;
+			}
+		}
+    }
 
     // game loop
-    while (1)
-	{
-		turnStartTime = clock();
-
+    while (1) {
         int rounds; // number of rounds left before the end of the game
         int bombs; // number of bombs left
         cin >> rounds >> bombs; cin.ignore();
-
-		grid.tick();
-		cerr << grid << endl;
-		
-		simulate(rounds, bombs, turnStartTime + (double)CLOCKS_PER_SEC * SIMULATION_TIME);
-
-		if (!grid.placements.empty() && grid.placements.front().x >= 0)
-		{
-			cout << grid.placements.front().x << " " << grid.placements.front().y << endl;
-			grid.bombs.push_back(Bomb(grid.placements.front().x, grid.placements.front().y));
-		}
-		else
-		{
-			cout << "WAIT" << endl;
-		}
-		
-		if (!grid.placements.empty() > 0)
-		{
-			grid.placements.erase (grid.placements.begin());
-		}
+#ifdef ECHO_INPUT
+		cerr << rounds << " " << bombs << endl;
+#endif
+		cout << mainFirewall.Simulator(rounds, bombs) << endl;
     }
 }
