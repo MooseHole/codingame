@@ -202,19 +202,18 @@ public:
 		return newPotentialNodes;
 	}
 
-	int BombScore(Coordinate Location)
+	int BombScore(Coordinate location)
 	{
-		int score = 0;
-		vector<Coordinate> blast;
-		vector<Coordinate> blastLocations = GetBlastLocations(Location);
-		for (Coordinate blastLocation : blastLocations)
+		auto search = bombScores.find(location);
+		if (search != bombScores.end())
 		{
-			if (SurveillanceExists(blastLocation))
-			{
-				score++;
-			}
+			return search->second;
 		}
 
+		int score = 0;
+		Explode(location, &score, false);
+
+		bombScores[location] = score;
 		return score;
 	}
 
@@ -232,6 +231,7 @@ private:
 	set<Coordinate> passiveNodes;
 	map<Coordinate, Bomb> bombs;
 	vector<Coordinate> newPotentialNodes;
+	map<Coordinate, int> bombScores;
 
 	const vector<Coordinate> blastZone{
 		Coordinate(-1, 0),  Coordinate(-2, 0),  Coordinate(-3, 0),
@@ -251,35 +251,61 @@ private:
 		return blast;
 	}
 
-	// Returns false if explosion should not proceed farther
-	bool ExplodeLocation(Coordinate location)
+	enum class ExplodeCheckResult { None, IsBomb, IsPassive };
+
+	ExplodeCheckResult ExplodeCheck(Coordinate location, int* score, bool doUpdate)
 	{
-		if (PassiveExists(location))
-		{
-			return false;
-		}
+		pair<bool, bool> StopBomb;
 
 		if (location.x < 0 || location.x >= width || location.y < 0 || location.y >= height)
 		{
-			return false;
+			return ExplodeCheckResult::IsPassive;
 		}
 
-		if (surveillanceNodes.erase(location) > 0)
+		if (BombExists(location))
 		{
-			newPotentialNodes.push_back(location);
+			return ExplodeCheckResult::IsBomb;
 		}
 
-		return true;
+		if (PassiveExists(location))
+		{
+			return ExplodeCheckResult::IsPassive;
+		}
+
+		if (doUpdate)
+		{
+			// Remove the node and add the location as a potential
+			if (surveillanceNodes.erase(location) > 0)
+			{
+				newPotentialNodes.push_back(location);
+			}
+		}
+		else if (surveillanceNodes.find(location) != surveillanceNodes.end())
+		{
+			if (score != NULL)
+			{
+				(*score)++;
+			}
+		}
+
+		return ExplodeCheckResult::None;
 	}
 
-	vector<Coordinate> Explode(Coordinate location)
+	vector<Coordinate> Explode(Coordinate location, int* score = NULL, bool doUpdate = true)
 	{
 		vector<Coordinate> otherBombs;
 
 		// North
 		for (int y = -1; y >= -3; y--)
 		{
-			if (!ExplodeLocation(Coordinate(location.x, location.y + y)))
+			Coordinate check = Coordinate(location.x, location.y + y);
+			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
+			if (result == ExplodeCheckResult::IsBomb)
+			{
+				otherBombs.push_back(location);
+				break;
+			}
+			else if (result == ExplodeCheckResult::IsPassive)
 			{
 				break;
 			}
@@ -288,7 +314,14 @@ private:
 		// East
 		for (int x = 1; x <= 3; x++)
 		{
-			if (!ExplodeLocation(Coordinate(location.x + x, location.y)))
+			Coordinate check = Coordinate(location.x + x, location.y);
+			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
+			if (result == ExplodeCheckResult::IsBomb)
+			{
+				otherBombs.push_back(location);
+				break;
+			}
+			else if (result == ExplodeCheckResult::IsPassive)
 			{
 				break;
 			}
@@ -297,7 +330,14 @@ private:
 		// South
 		for (int y = 1; y <= 3; y++)
 		{
-			if (!ExplodeLocation(Coordinate(location.x, location.y + y)))
+			Coordinate check = Coordinate(location.x, location.y + y);
+			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
+			if (result == ExplodeCheckResult::IsBomb)
+			{
+				otherBombs.push_back(location);
+				break;
+			}
+			else if (result == ExplodeCheckResult::IsPassive)
 			{
 				break;
 			}
@@ -306,7 +346,14 @@ private:
 		// West
 		for (int x = -1; x >= -3; x--)
 		{
-			if (!ExplodeLocation(Coordinate(location.x + x, location.y)))
+			Coordinate check = Coordinate(location.x + x, location.y);
+			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
+			if (result == ExplodeCheckResult::IsBomb)
+			{
+				otherBombs.push_back(check);
+				break;
+			}
+			else if (result == ExplodeCheckResult::IsPassive)
 			{
 				break;
 			}
@@ -395,7 +442,6 @@ private:
 		{
 			q.push(newLocation);
 		}
-
 
 		if (firewall.NoSurveillanceLeft())
 		{
