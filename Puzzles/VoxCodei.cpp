@@ -179,7 +179,7 @@ public:
 
 	bool CanPlaceBomb(Coordinate location)
 	{
-		return !AnythingExists(location) && BombScore(location);
+		return !AnythingExists(location);
 	}
 
 	vector<Coordinate> ExecuteRound(int round)
@@ -207,21 +207,30 @@ public:
 		auto search = bombScores.find(location);
 		if (search != bombScores.end())
 		{
-			return search->second;
+			return (int)search->second.size();
 		}
 
-		int score = 0;
+		set<Coordinate> score;
 		Explode(location, &score, false);
 
+		for (auto &bombScore : bombScores)
+		{
+			if (bombScore.second == score)
+			{
+				return 0;
+			}
+		}
+
 		bombScores[location] = score;
-		return score;
+		return (int)score.size();
 	}
 
 	bool NoSurveillanceLeft() const
 	{
 		return surveillanceNodes.empty();
 	}
-	bool NoBombsLeft() const
+
+	bool NoBombsOnBoard() const
 	{
 		return bombs.empty();
 	}
@@ -231,7 +240,7 @@ private:
 	set<Coordinate> passiveNodes;
 	map<Coordinate, Bomb> bombs;
 	vector<Coordinate> newPotentialNodes;
-	map<Coordinate, int> bombScores;
+	map<Coordinate, set<Coordinate>> bombScores;
 
 	const vector<Coordinate> blastZone{
 		Coordinate(-1, 0),  Coordinate(-2, 0),  Coordinate(-3, 0),
@@ -253,7 +262,7 @@ private:
 
 	enum class ExplodeCheckResult { None, IsBomb, IsPassive };
 
-	ExplodeCheckResult ExplodeCheck(Coordinate location, int* score, bool doUpdate)
+	ExplodeCheckResult ExplodeCheck(Coordinate location, set<Coordinate>* score, bool doUpdate)
 	{
 		pair<bool, bool> StopBomb;
 
@@ -284,14 +293,14 @@ private:
 		{
 			if (score != NULL)
 			{
-				(*score)++;
+				score->insert(location);
 			}
 		}
 
 		return ExplodeCheckResult::None;
 	}
 
-	vector<Coordinate> Explode(Coordinate location, int* score = NULL, bool doUpdate = true)
+	vector<Coordinate> Explode(Coordinate location, set<Coordinate>* score = NULL, bool doUpdate = true)
 	{
 		vector<Coordinate> otherBombs;
 
@@ -457,37 +466,49 @@ private:
 
 		if (bombsLeft <= 0)
 		{
-			if (firewall.NoBombsLeft())
+			if (firewall.NoBombsOnBoard())
 			{
 				// No bombs left to place, no bombs on board, but surveillance remains.  Fail.
 				return false;
 			}
 
+			// Keep waiting until all the bombs explode
 			return SimulateRecurse(firewall, q, round - 1, bombsLeft);
 		}
 
+		// If there are any bombs
+		if (!firewall.NoBombsOnBoard())
+		{
+			// Try waiting
+			if (SimulateRecurse(firewall, q, round - 1, bombsLeft))
+			{
+				Outputs.push_back("WAIT");
+
+				// A child passed.  Pass.
+				return true;
+			}
+		}
+
+		// Try all the rest of the queue
 		auto& tempLocations = q;
 		while (!tempLocations.empty())
 		{
 			Coordinate location = tempLocations.top();
 			tempLocations.pop();
+
 			Firewall check = firewall;
 			check.AddBomb(location, round);
 
-			if (SimulateRecurse(check, q, round - 1, bombsLeft - 1))
+			if (SimulateRecurse(check, tempLocations, round - 1, bombsLeft - 1))
 			{
 				Outputs.push_back(location.GetOutput());
+
+				// A child passed.  Pass.
 				return true;
 			}
 		}
 
-		Firewall checkWait = firewall;
-		if (SimulateRecurse(checkWait, q, round - 1, bombsLeft))
-		{
-			Outputs.push_back("WAIT");
-			return true;
-		}
-
+		// No success.  Fail.
 		return false;
 	}
 
@@ -527,7 +548,7 @@ public:
 			Firewall check = mainFirewall;
 			check.AddBomb(location, round);
 
-			if (SimulateRecurse(check, simulatorBombLocations, round - 1, bombsLeft - 1))
+			if (SimulateRecurse(check, tempLocations, round - 1, bombsLeft - 1))
 			{
 				mainFirewall.AddBomb(location, round);
 				Outputs.push_back(location.GetOutput());
