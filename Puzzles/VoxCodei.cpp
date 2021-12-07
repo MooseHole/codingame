@@ -4,10 +4,12 @@
 #include <algorithm>
 #include <map>
 #include <set>
+#include <queue>
 
 #define ECHO_INPUT true
 
 using namespace std;
+
 
 class Coordinate
 {
@@ -141,11 +143,14 @@ public:
 	}
 };
 
+int width; // width of the firewall grid
+int height; // height of the firewall grid
+
 class Firewall
 {
 public:
 
-	Firewall(int w, int h) : width(w), height(h)
+	Firewall()
 	{
 	}
 
@@ -154,7 +159,6 @@ public:
 		surveillanceNodes = other.surveillanceNodes;
 		passiveNodes = other.passiveNodes;
 		bombs = other.bombs;
-		simulatorBombLocations = other.simulatorBombLocations;
 		return *this;
 	}
 
@@ -175,10 +179,10 @@ public:
 
 	bool CanPlaceBomb(Coordinate location)
 	{
-		return !AnythingExists(location) && BombMightHitSomething(location);
+		return !AnythingExists(location) && BombScore(location);
 	}
 
-	void SetRound(int round)
+	vector<Coordinate> ExecuteRound(int round)
 	{
 		vector<Coordinate> explodeNow;
 
@@ -191,115 +195,63 @@ public:
 			}
 		}
 
+		newPotentialNodes.clear();
+
 		ExplodeBombs(explodeNow);
+
+		return newPotentialNodes;
 	}
 
-	bool Simulate(int round, int bombsLeft)
+	int BombScore(Coordinate Location)
 	{
-		SetRound(round);
-
-		// This is the end of the game
-		if (round == 1)
+		int score = 0;
+		vector<Coordinate> blast;
+		vector<Coordinate> blastLocations = GetBlastLocations(Location);
+		for (Coordinate blastLocation : blastLocations)
 		{
-			return surveillanceNodes.size() <= 0;
-		}
-
-		if (bombsLeft <= 0)
-		{
-			if (bombs.size() == 0)
+			if (SurveillanceExists(blastLocation))
 			{
-				return false;
-			}
-
-			return Simulate(round - 1, bombsLeft);
-		}
-
-		for (Coordinate location : simulatorBombLocations)
-		{
-			Firewall check = *this;
-			check.AddBomb(location, round);
-
-			if (check.Simulate(round - 1, bombsLeft - 1))
-			{
-				return true;
+				score++;
 			}
 		}
 
-		Firewall checkWait = *this;
-		if (checkWait.Simulate(round - 1, bombsLeft))
-		{
-			return true;
-		}
-
-		return false;
+		return score;
 	}
 
-	string Simulator(int round, int bombsLeft)
+	bool NoSurveillanceLeft() const
 	{
-		if (bombsLeft <= 0)
-		{
-			return "WAIT";
-		}
-
-		SetRound(round);
-
-		for (int x = 0; x < width; x++)
-		{
-			for (int y = 0; y < height; y++)
-			{
-				Coordinate location(x, y);
-
-				if (CanPlaceBomb(location) && BombMightHitSomething(location))
-				{
-					simulatorBombLocations.insert(location);
-				}
-			}
-		}
-
-		// check each location, simulate next round, check done, check each location, simulate each round, check done, 
-		for (Coordinate location : simulatorBombLocations)
-		{
-			Firewall check = *this;
-			check.AddBomb(location, round);
-
-			if (check.Simulate(round - 1, bombsLeft - 1))
-			{
-				AddBomb(location, round);
-				return location.GetOutput();
-			}
-		}
-
-		return "WAIT";
+		return surveillanceNodes.empty();
+	}
+	bool NoBombsLeft() const
+	{
+		return bombs.empty();
 	}
 
 private:
 	set<Coordinate> surveillanceNodes;
 	set<Coordinate> passiveNodes;
 	map<Coordinate, Bomb> bombs;
-	set<Coordinate> simulatorBombLocations;
-	int width = 0;
-	int height = 0;
-	const vector<Coordinate> blastLocations{
+	vector<Coordinate> newPotentialNodes;
+
+	const vector<Coordinate> blastZone{
 		Coordinate(-1, 0),  Coordinate(-2, 0),  Coordinate(-3, 0),
 		Coordinate(1, 0),  Coordinate(2, 0),  Coordinate(3, 0),
 		Coordinate(0, -1),  Coordinate(0, -2),  Coordinate(0, -3),
 		Coordinate(0, 1),  Coordinate(0, 2),  Coordinate(0, 3)
 	};
 
-	bool BombMightHitSomething(Coordinate Location)
+	vector<Coordinate> GetBlastLocations(Coordinate Location)
 	{
 		vector<Coordinate> blast;
-		for (Coordinate blastLocation : blastLocations)
+		for (Coordinate blastLocation : blastZone)
 		{
-			if (SurveillanceExists(Location + blastLocation))
-			{
-				return true;
-			}
+			blast.push_back(blastLocation + Location);
 		}
 
-		return false;
+		return blast;
 	}
 
+	// Returns false if explosion should not proceed farther
 	bool ExplodeLocation(Coordinate location)
 	{
 		if (PassiveExists(location))
@@ -307,8 +259,16 @@ private:
 			return false;
 		}
 
-		surveillanceNodes.erase(location);
-		simulatorBombLocations.insert(location);
+		if (location.x < 0 || location.x >= width || location.y < 0 || location.y >= height)
+		{
+			return false;
+		}
+
+		if (surveillanceNodes.erase(location) > 0)
+		{
+			newPotentialNodes.push_back(location);
+		}
+
 		return true;
 	}
 
@@ -414,16 +374,132 @@ private:
 	}
 };
 
+Firewall mainFirewall;
+
+class CompareBombScore
+{
+public:
+	bool operator() (Coordinate first, Coordinate second)
+	{
+		return mainFirewall.BombScore(first) < mainFirewall.BombScore(second);
+	}
+};
+
+class Simulator
+{
+private:
+	bool SimulateRecurse(Firewall firewall, priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> q, int round, int bombsLeft)
+	{
+		vector<Coordinate> newLocations = firewall.ExecuteRound(round);
+		for (Coordinate newLocation : newLocations)
+		{
+			q.push(newLocation);
+		}
+
+
+		if (firewall.NoSurveillanceLeft())
+		{
+			// Cleared te board.  Pass.
+			return true;
+		}
+
+		if (round == 0)
+		{
+			// Out of time.  Fail.
+			return false;
+		}
+
+		if (bombsLeft <= 0)
+		{
+			if (firewall.NoBombsLeft())
+			{
+				// No bombs left to place, no bombs on board, but surveillance remains.  Fail.
+				return false;
+			}
+
+			return SimulateRecurse(firewall, q, round - 1, bombsLeft);
+		}
+
+		auto& tempLocations = q;
+		while (!tempLocations.empty())
+		{
+			Coordinate location = tempLocations.top();
+			tempLocations.pop();
+			Firewall check = firewall;
+			check.AddBomb(location, round);
+
+			if (SimulateRecurse(check, q, round - 1, bombsLeft - 1))
+			{
+				Outputs.push_back(location.GetOutput());
+				return true;
+			}
+		}
+
+		Firewall checkWait = firewall;
+		if (SimulateRecurse(checkWait, q, round - 1, bombsLeft))
+		{
+			Outputs.push_back("WAIT");
+			return true;
+		}
+
+		return false;
+	}
+
+public:
+	vector<string> Outputs;
+
+	void Simulate(int round, int bombsLeft)
+	{
+		if (bombsLeft <= 0)
+		{
+			Outputs.push_back("WAIT");
+			return;
+		}
+
+		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> simulatorBombLocations;
+
+		for (int x = 0; x < width; x++)
+		{
+			for (int y = 0; y < height; y++)
+			{
+				Coordinate location(x, y);
+
+				if (mainFirewall.CanPlaceBomb(location) && mainFirewall.BombScore(location))
+				{
+					simulatorBombLocations.push(location);
+				}
+			}
+		}
+
+		// check each location, simulate next round, check done, check each location, simulate each round, check done, 
+		auto& tempLocations = simulatorBombLocations;
+		while (!tempLocations.empty())
+		{
+			Coordinate location = tempLocations.top();
+			tempLocations.pop();
+
+			Firewall check = mainFirewall;
+			check.AddBomb(location, round);
+
+			if (SimulateRecurse(check, simulatorBombLocations, round - 1, bombsLeft - 1))
+			{
+				mainFirewall.AddBomb(location, round);
+				Outputs.push_back(location.GetOutput());
+				return;
+			}
+		}
+
+		Outputs.push_back("WAIT");
+		return;
+	}
+};
+
 int main()
 {
-    int width; // width of the firewall grid
-    int height; // height of the firewall grid
     cin >> width >> height; cin.ignore();
 #ifdef ECHO_INPUT
 	cerr << width << " " << height << endl;
 #endif
-
-	Firewall mainFirewall(width, height);
 	
 	for (int i = 0; i < height; i++)
 	{
@@ -448,7 +524,24 @@ int main()
 		}
     }
 
-    // game loop
+	Simulator simulator;
+
+	// Initial conditions
+	int rounds; // number of rounds left before the end of the game
+	int bombs; // number of bombs left
+	cin >> rounds >> bombs; cin.ignore();
+#ifdef ECHO_INPUT
+	cerr << rounds << " " << bombs << endl;
+#endif
+
+	// Simulate the whole thing
+	simulator.Simulate(rounds, bombs);
+	std::reverse(simulator.Outputs.begin(), simulator.Outputs.end());
+
+	int outputIndex = 0;
+	cout << simulator.Outputs[outputIndex++] << endl;
+
+	// game loop
     while (1) {
         int rounds; // number of rounds left before the end of the game
         int bombs; // number of bombs left
@@ -456,6 +549,14 @@ int main()
 #ifdef ECHO_INPUT
 		cerr << rounds << " " << bombs << endl;
 #endif
-		cout << mainFirewall.Simulator(rounds, bombs) << endl;
+
+		if (outputIndex >= simulator.Outputs.size())
+		{
+			cout << "WAIT" << endl;
+		}
+		else
+		{
+			cout << simulator.Outputs[outputIndex++] << endl;
+		}
     }
 }
