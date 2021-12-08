@@ -429,13 +429,14 @@ private:
 };
 
 Firewall mainFirewall;
+Firewall scratchFirewall;
 
 class CompareBombScore
 {
 public:
 	bool operator() (Coordinate first, Coordinate second)
 	{
-		return mainFirewall.BombScore(first) < mainFirewall.BombScore(second);
+		return scratchFirewall.BombScore(first) < scratchFirewall.BombScore(second);
 	}
 };
 
@@ -506,6 +507,7 @@ private:
 
 				Firewall check = waitOutFirewall;
 				check.AddBomb(location, round);
+				scratchFirewall = check;
 				priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> checkQ = *q;
 
 				if (SimulateRecurse(&check, &checkQ, round - 1, bombsLeft - 1))
@@ -528,6 +530,7 @@ public:
 
 	void Simulate(int round, int bombsLeft)
 	{
+		scratchFirewall = mainFirewall;
 		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> q;
 
 		for (int x = 0; x < width; x++)
@@ -552,6 +555,7 @@ public:
 			Firewall check = mainFirewall;
 			check.AddBomb(location, round);
 
+			scratchFirewall = check;
 			priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> checkQ = q;
 			if (SimulateRecurse(&check, &checkQ, round - 1, bombsLeft - 1))
 			{
