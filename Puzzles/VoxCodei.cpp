@@ -74,7 +74,7 @@ public:
 		{
 			return false;
 		}
-		
+
 		if (y < other.y)
 		{
 			return true;
@@ -213,7 +213,7 @@ public:
 		set<Coordinate> score;
 		Explode(location, &score, false);
 
-		for (auto &bombScore : bombScores)
+		for (auto& bombScore : bombScores)
 		{
 			if (bombScore.second == score)
 			{
@@ -447,10 +447,6 @@ private:
 	bool SimulateRecurse(Firewall firewall, priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> q, int round, int bombsLeft)
 	{
 		vector<Coordinate> newLocations = firewall.ExecuteRound(round);
-		for (Coordinate newLocation : newLocations)
-		{
-			q.push(newLocation);
-		}
 
 		if (firewall.NoSurveillanceLeft())
 		{
@@ -458,10 +454,18 @@ private:
 			return true;
 		}
 
-		if (round == 0)
+		if (round == 1)
 		{
 			// Out of time.  Fail.
 			return false;
+		}
+
+		for (Coordinate newLocation : newLocations)
+		{
+			if (firewall.BombScore(newLocation))
+			{
+				q.push(newLocation);
+			}
 		}
 
 		if (bombsLeft <= 0)
@@ -489,7 +493,7 @@ private:
 			}
 		}
 
-		// Try all the rest of the queue
+		// Try all the rest of the queued bombs
 		auto& tempLocations = q;
 		while (!tempLocations.empty())
 		{
@@ -508,7 +512,7 @@ private:
 			}
 		}
 
-		// No success.  Fail.
+		// No success found.  Fail.
 		return false;
 	}
 
@@ -563,15 +567,15 @@ public:
 
 int main()
 {
-    cin >> width >> height; cin.ignore();
+	cin >> width >> height; cin.ignore();
 #ifdef ECHO_INPUT
 	cerr << width << " " << height << endl;
 #endif
-	
+
 	for (int i = 0; i < height; i++)
 	{
-        string map_row;
-        getline(cin, map_row); // one line of the firewall grid
+		string map_row;
+		getline(cin, map_row); // one line of the firewall grid
 #ifdef ECHO_INPUT
 		cerr << map_row << endl;
 #endif
@@ -589,7 +593,7 @@ int main()
 				break;
 			}
 		}
-    }
+	}
 
 	Simulator simulator;
 
@@ -609,10 +613,10 @@ int main()
 	cout << simulator.Outputs[outputIndex++] << endl;
 
 	// game loop
-    while (1) {
-        int rounds; // number of rounds left before the end of the game
-        int bombs; // number of bombs left
-        cin >> rounds >> bombs; cin.ignore();
+	while (1) {
+		int rounds; // number of rounds left before the end of the game
+		int bombs; // number of bombs left
+		cin >> rounds >> bombs; cin.ignore();
 #ifdef ECHO_INPUT
 		cerr << rounds << " " << bombs << endl;
 #endif
@@ -625,5 +629,5 @@ int main()
 		{
 			cout << simulator.Outputs[outputIndex++] << endl;
 		}
-    }
+	}
 }
