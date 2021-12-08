@@ -7,6 +7,8 @@
 #include <queue>
 
 #define ECHO_INPUT true
+#define BLAST_RADIUS 3
+#define BLAST_TIME 3
 
 using namespace std;
 
@@ -111,7 +113,7 @@ public:
 
 	Bomb(Coordinate location, int roundsRemaining) :
 		Location(location),
-		TurnExploding(roundsRemaining - 3)
+		TurnExploding(roundsRemaining - BLAST_TIME)
 	{
 	}
 
@@ -145,6 +147,8 @@ public:
 
 int width; // width of the firewall grid
 int height; // height of the firewall grid
+
+vector<Coordinate> blastZone;
 
 class Firewall
 {
@@ -217,7 +221,8 @@ public:
 		{
 			if (bombScore.second == score)
 			{
-				return 0;
+				score.clear();
+				break;
 			}
 		}
 
@@ -241,13 +246,6 @@ private:
 	map<Coordinate, Bomb> bombs;
 	vector<Coordinate> newPotentialNodes;
 	map<Coordinate, set<Coordinate>> bombScores;
-
-	const vector<Coordinate> blastZone{
-		Coordinate(-1, 0),  Coordinate(-2, 0),  Coordinate(-3, 0),
-		Coordinate(1, 0),  Coordinate(2, 0),  Coordinate(3, 0),
-		Coordinate(0, -1),  Coordinate(0, -2),  Coordinate(0, -3),
-		Coordinate(0, 1),  Coordinate(0, 2),  Coordinate(0, 3)
-	};
 
 	vector<Coordinate> GetBlastLocations(Coordinate Location)
 	{
@@ -305,7 +303,7 @@ private:
 		vector<Coordinate> otherBombs;
 
 		// North
-		for (int y = -1; y >= -3; y--)
+		for (int y = -1; y >= -BLAST_RADIUS; y--)
 		{
 			Coordinate check = Coordinate(location.x, location.y + y);
 			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
@@ -321,7 +319,7 @@ private:
 		}
 
 		// East
-		for (int x = 1; x <= 3; x++)
+		for (int x = 1; x <= BLAST_RADIUS; x++)
 		{
 			Coordinate check = Coordinate(location.x + x, location.y);
 			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
@@ -337,7 +335,7 @@ private:
 		}
 
 		// South
-		for (int y = 1; y <= 3; y++)
+		for (int y = 1; y <= BLAST_RADIUS; y++)
 		{
 			Coordinate check = Coordinate(location.x, location.y + y);
 			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
@@ -353,7 +351,7 @@ private:
 		}
 
 		// West
-		for (int x = -1; x >= -3; x--)
+		for (int x = -1; x >= -BLAST_RADIUS; x--)
 		{
 			Coordinate check = Coordinate(location.x + x, location.y);
 			ExplodeCheckResult result = ExplodeCheck(check, score, doUpdate);
@@ -444,13 +442,13 @@ public:
 class Simulator
 {
 private:
-	bool SimulateRecurse(Firewall firewall, priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> q, int round, int bombsLeft)
+	bool SimulateRecurse(Firewall* firewall, priority_queue<Coordinate, vector<Coordinate>, CompareBombScore>* q, int round, int bombsLeft)
 	{
-		vector<Coordinate> newLocations = firewall.ExecuteRound(round);
+		vector<Coordinate> newLocations = firewall->ExecuteRound(round);
 
-		if (firewall.NoSurveillanceLeft())
+		if (firewall->NoSurveillanceLeft())
 		{
-			// Cleared te board.  Pass.
+			// Cleared the board.  Pass.
 			return true;
 		}
 
@@ -462,15 +460,15 @@ private:
 
 		for (Coordinate newLocation : newLocations)
 		{
-			if (firewall.BombScore(newLocation))
+			if (firewall->BombScore(newLocation))
 			{
-				q.push(newLocation);
+				q->push(newLocation);
 			}
 		}
 
 		if (bombsLeft <= 0)
 		{
-			if (firewall.NoBombsOnBoard())
+			if (firewall->NoBombsOnBoard())
 			{
 				// No bombs left to place, no bombs on board, but surveillance remains.  Fail.
 				return false;
@@ -481,36 +479,43 @@ private:
 		}
 
 		// If there are any bombs
-		if (!firewall.NoBombsOnBoard())
-		{
-			// Try waiting
-			if (SimulateRecurse(firewall, q, round - 1, bombsLeft))
-			{
-				Outputs.push_back("WAIT");
-
-				// A child passed.  Pass.
-				return true;
-			}
-		}
+		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> waitQ = *q;
 
 		// Try all the rest of the queued bombs
-		auto& tempLocations = q;
-		while (!tempLocations.empty())
+		if (round > BLAST_TIME)
 		{
-			Coordinate location = tempLocations.top();
-			tempLocations.pop();
-
-			Firewall check = firewall;
-			check.AddBomb(location, round);
-
-			if (SimulateRecurse(check, tempLocations, round - 1, bombsLeft - 1))
+			while (!q->empty())
 			{
-				Outputs.push_back(location.GetOutput());
+				Coordinate location = q->top();
+				q->pop();
 
-				// A child passed.  Pass.
-				return true;
+				Firewall check = *firewall;
+				check.AddBomb(location, round);
+				priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> checkQ = *q;
+
+				if (SimulateRecurse(&check, &checkQ, round - 1, bombsLeft - 1))
+				{
+					Outputs.push_back(location.GetOutput());
+
+					// A child passed.  Pass.
+					return true;
+				}
+			}
+
+			if (!firewall->NoBombsOnBoard())
+			{
+
+				// Try waiting
+				if (SimulateRecurse(firewall, &waitQ, round - 1, bombsLeft))
+				{
+					Outputs.push_back("WAIT");
+
+					// A child passed.  Pass.
+					return true;
+				}
 			}
 		}
+
 
 		// No success found.  Fail.
 		return false;
@@ -521,13 +526,7 @@ public:
 
 	void Simulate(int round, int bombsLeft)
 	{
-		if (bombsLeft <= 0)
-		{
-			Outputs.push_back("WAIT");
-			return;
-		}
-
-		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> simulatorBombLocations;
+		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> q;
 
 		for (int x = 0; x < width; x++)
 		{
@@ -537,22 +536,22 @@ public:
 
 				if (mainFirewall.CanPlaceBomb(location) && mainFirewall.BombScore(location))
 				{
-					simulatorBombLocations.push(location);
+					q.push(location);
 				}
 			}
 		}
 
 		// check each location, simulate next round, check done, check each location, simulate each round, check done, 
-		auto& tempLocations = simulatorBombLocations;
-		while (!tempLocations.empty())
+		while (!q.empty())
 		{
-			Coordinate location = tempLocations.top();
-			tempLocations.pop();
+			Coordinate location = q.top();
+			q.pop();
 
 			Firewall check = mainFirewall;
 			check.AddBomb(location, round);
 
-			if (SimulateRecurse(check, tempLocations, round - 1, bombsLeft - 1))
+			priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> checkQ = q;
+			if (SimulateRecurse(&check, &checkQ, round - 1, bombsLeft - 1))
 			{
 				mainFirewall.AddBomb(location, round);
 				Outputs.push_back(location.GetOutput());
@@ -567,27 +566,35 @@ public:
 
 int main()
 {
+	for (int i = 1; i <= BLAST_RADIUS; i++)
+	{
+		blastZone.push_back(Coordinate(0 - i, 0));
+		blastZone.push_back(Coordinate(0 + i, 0));
+		blastZone.push_back(Coordinate(0, 0 - 1));
+		blastZone.push_back(Coordinate(0, 0 + 1));
+	}
+
 	cin >> width >> height; cin.ignore();
 #ifdef ECHO_INPUT
 	cerr << width << " " << height << endl;
 #endif
 
-	for (int i = 0; i < height; i++)
+	for (int y = 0; y < height; y++)
 	{
 		string map_row;
 		getline(cin, map_row); // one line of the firewall grid
 #ifdef ECHO_INPUT
 		cerr << map_row << endl;
 #endif
-		for (int j = 0; j < width; j++)
+		for (int x = 0; x < width; x++)
 		{
-			switch (map_row[j])
+			switch (map_row[x])
 			{
 			case '@':
-				mainFirewall.AddSurveillance(Coordinate(j, i));
+				mainFirewall.AddSurveillance(Coordinate(x, y));
 				break;
 			case '#':
-				mainFirewall.AddPassive(Coordinate(j, i));
+				mainFirewall.AddPassive(Coordinate(x, y));
 				break;
 			default:
 				break;
