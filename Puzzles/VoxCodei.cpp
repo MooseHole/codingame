@@ -478,37 +478,39 @@ private:
 			return SimulateRecurse(firewall, q, round - 1, bombsLeft);
 		}
 
-		// If there are any bombs
-		priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> waitQ = *q;
-
 		// Try all the rest of the queued bombs
 		if (round > BLAST_TIME)
 		{
+			if (!firewall->NoBombsOnBoard())
+			{
+				// Try waiting
+				if (SimulateRecurse(firewall, q, round - 1, bombsLeft))
+				{
+					Outputs.push_back("WAIT");
+
+					// A child passed.  Pass.
+					return true;
+				}
+
+			}
+
+			Firewall waitOutFirewall = *firewall;
+			waitOutFirewall.ExecuteRound(round - 1);
+			waitOutFirewall.ExecuteRound(round - 2);
+			waitOutFirewall.ExecuteRound(round - 3);
+
 			while (!q->empty())
 			{
 				Coordinate location = q->top();
 				q->pop();
 
-				Firewall check = *firewall;
+				Firewall check = waitOutFirewall;
 				check.AddBomb(location, round);
 				priority_queue<Coordinate, vector<Coordinate>, CompareBombScore> checkQ = *q;
 
 				if (SimulateRecurse(&check, &checkQ, round - 1, bombsLeft - 1))
 				{
 					Outputs.push_back(location.GetOutput());
-
-					// A child passed.  Pass.
-					return true;
-				}
-			}
-
-			if (!firewall->NoBombsOnBoard())
-			{
-
-				// Try waiting
-				if (SimulateRecurse(firewall, &waitQ, round - 1, bombsLeft))
-				{
-					Outputs.push_back("WAIT");
 
 					// A child passed.  Pass.
 					return true;
