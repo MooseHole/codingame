@@ -9,12 +9,12 @@ using namespace std;
 int main()
 {
     int N;
-    int mainY;
     int minY;
     int maxY;
     int minX;
     int maxX;
-    unsigned long long int length = ULLONG_MAX;
+    ulong length;
+
     map<int, int> houseYUnique;
     cin >> N; cin.ignore();
     for (int i = 0; i < N; i++) {
@@ -55,31 +55,39 @@ int main()
             }
         }
     }
-    
-    for (map<int, int>::iterator mainY = houseYUnique.begin(); mainY != houseYUnique.end(); ++mainY)
+
+    int medianIndex = N/2;
+    int trunkY = 0;
+    ulong trunkLength = maxX - minX;
+    int index = 0;
+    for (map<int, int>::iterator houseY = houseYUnique.begin(); houseY != houseYUnique.end(); ++houseY)
     {
-        cerr << "Iterating at " << (*mainY).first << endl;
+        bool isMedian = false;
+        if (index <= medianIndex && (index + (*houseY).second) > medianIndex)
         {
-            int placement = (*mainY).first;
+            isMedian = true;
+        }
 
-            ulong checkLength = maxX - minX;
-            cerr << "Main at Y=" << placement << " main length " << checkLength << endl;
+        index += (*houseY).second;
 
-            for (map<int, int>::iterator nodeY = houseYUnique.begin(); nodeY != houseYUnique.end(); ++nodeY)
-            {
-                ulong dedicated = abs(placement - (*nodeY).first) * (*nodeY).second;
-                checkLength += dedicated;
-                cerr << "add " << dedicated << " for house at Y=" << (*nodeY).first << " total " << checkLength << endl;
-            }
-        
-            if (length > checkLength)
-            {
-                length = checkLength;
-                cerr << "!SET! at length " << length << endl;
-            }
+        if (isMedian)
+        {
+            trunkY = (*houseY).first;
+            break;
         }
     }
 
+    length = trunkLength;
+
+    cerr << "Trunk at Y=" << trunkY << " Trunk length " << trunkLength << endl;
+
+    for (map<int, int>::iterator nodeY = houseYUnique.begin(); nodeY != houseYUnique.end(); ++nodeY)
+    {
+        ulong dedicated = abs(trunkY - (*nodeY).first) * (*nodeY).second;
+        length += dedicated;
+        cerr << "add " << dedicated << " for house at Y=" << (*nodeY).first << " total " << length << endl;
+    }
+        
     // Write an action using cout. DON'T FORGET THE "<< endl"
     // To debug: cerr << "Debug messages..." << endl;
 
