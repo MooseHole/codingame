@@ -1,16 +1,11 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include <algorithm>
 #include <climits>
-#include <set>
+#include <map>
 
 using namespace std;
 
-/**
- * Auto-generated code below aims at helping you parse
- * the standard input according to the problem statement.
- **/
 int main()
 {
     int N;
@@ -20,8 +15,7 @@ int main()
     int minX;
     int maxX;
     unsigned long long int length = ULLONG_MAX;
-    set<int> houseYUnique;
-    vector<int> houseY;
+    map<int, int> houseYUnique;
     cin >> N; cin.ignore();
     for (int i = 0; i < N; i++) {
         int X;
@@ -29,8 +23,7 @@ int main()
         cin >> X >> Y; cin.ignore();
         cerr << X << " " << Y << endl;
         
-        houseYUnique.insert(Y);
-        houseY.push_back(Y);
+        houseYUnique[Y] += 1;
         
         if (i == 0)
         {
@@ -63,28 +56,20 @@ int main()
         }
     }
     
-    int previousMainY = *(houseYUnique.begin());
-    for (set<int>::iterator mainY = houseYUnique.begin(); mainY != houseYUnique.end(); ++mainY)
+    for (map<int, int>::iterator mainY = houseYUnique.begin(); mainY != houseYUnique.end(); ++mainY)
     {
-        cerr << "Iterating at " << *mainY << endl;
-        for (int i = 0; i < (previousMainY == *mainY ? 1 : 2); i++)
+        cerr << "Iterating at " << (*mainY).first << endl;
         {
-            int placement;
-            if (i == 0)
-            {
-                placement = *mainY;
-            }
-            else
-            {
-                placement = previousMainY + (*mainY - previousMainY) / 2;
-            }
+            int placement = (*mainY).first;
+
             ulong checkLength = maxX - minX;
             cerr << "Main at Y=" << placement << " main length " << checkLength << endl;
-            for (vector<int>::iterator nodeY = houseY.begin(); nodeY != houseY.end(); ++nodeY)
+
+            for (map<int, int>::iterator nodeY = houseYUnique.begin(); nodeY != houseYUnique.end(); ++nodeY)
             {
-                ulong dedicated = abs(placement - *nodeY);
+                ulong dedicated = abs(placement - (*nodeY).first) * (*nodeY).second;
                 checkLength += dedicated;
-                cerr << "add " << dedicated << " for house at Y=" << *nodeY << " total " << checkLength << endl;
+                cerr << "add " << dedicated << " for house at Y=" << (*nodeY).first << " total " << checkLength << endl;
             }
         
             if (length > checkLength)
@@ -93,8 +78,6 @@ int main()
                 cerr << "!SET! at length " << length << endl;
             }
         }
-        
-        previousMainY = *mainY;
     }
 
     // Write an action using cout. DON'T FORGET THE "<< endl"
