@@ -418,6 +418,12 @@ public:
     double stepCrash()
     {
         Coordinate oldLocation = location;
+
+        if (fuel < power)
+        {
+            power = fuel;
+        }
+
         fuel -= power;
         velocity.y -= GRAVITY;
         velocity.y += power * cos((double)-rotation * DEG_TO_RAD);
