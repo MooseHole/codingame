@@ -301,7 +301,7 @@ class Surface
 
     bool crash(Segment path)
     {
-        for (std::vector<Segment>::iterator it = segments.begin() ; it != segments.end(); ++it)
+        for (std::vector<Segment>::iterator it = segments.begin(); it != segments.end(); ++it)
         {
             if (path.intersects(*it))
             {
@@ -326,7 +326,8 @@ public:
 	Segment target;
 
 	Lander()
-	{}
+	{
+    }
 
 	Lander& operator=(const Lander& other)
 	{
@@ -405,23 +406,6 @@ public:
 
 	void findSolution()
 	{
-cerr << "findSolution location=" << location << " target=" << target << endl;
-		if (target.points[0].x > location.x)
-		{
-			rotate(-15);
-			increasePower();
-		}
-		else if (target.points[1].x < location.x)
-		{
-			rotate(15);
-			increasePower();
-		}
-		else
-		{
-			goVertical();
-			decreasePower();
-		}
-
         simulate();
 	}
 
@@ -430,8 +414,9 @@ cerr << "findSolution location=" << location << " target=" << target << endl;
         Coordinate oldLocation = location;
         fuel -= power;
         velocity.y -= GRAVITY;
-        velocity.y += power * sin(rotation);
-        velocity.x += power * cos(rotation);
+        velocity.y += power * cos((double)-rotation * DEG_TO_RAD);
+        velocity.x += power * sin((double)-rotation * DEG_TO_RAD);
+
         location += velocity;
         Segment path(oldLocation, location);
 
@@ -444,43 +429,95 @@ cerr << "findSolution location=" << location << " target=" << target << endl;
         return false;
     }
 
-    int stepsUntilCrash()
+    int stepsUntilCrash(int maxSteps)
     {
         int steps = 0;
         while (!step())
         {
             steps++;
+            if (steps > maxSteps)
+            {
+                break;
+            }
         }
 
         return steps;
     }
 
+    double distanceToTarget()
+    {
+        location.distance(target.center);
+    }
+
+    int score()
+    {
+        int crashStepMax = 10;
+        int crashMultiplier = 0;
+        int crashSteps = stepsUntilCrash(crashStepMax + 1);
+        if (crashSteps < crashStepMax)
+        {
+            crashMultiplier = 1000;
+        }
+
+        int distanceX = abs(location.x - target.center.x);
+
+        return crashSteps * crashMultiplier + distanceX * -1;
+    }
+
     void simulate()
     {
-        Lander current = *this;
-        Lander rotateCCW = *this;
-        Lander rotateCW = *this;
-        Lander slower = *this;
-        Lander faster = *this;
+        map<string, Lander> tests;
+        tests["Current"] = *this;
+        tests["rotateCCW"] = *this;
+        tests["rotateCW"] = *this;
+        tests["slower"] = *this;
+        tests["faster"] = *this;
 
-        rotateCCW.rotate(MAX_ROTATE);
-        rotateCW.rotate(MIN_ROTATE);
-        slower.decreasePower();
-        faster.increasePower();
+        // Rotation does not change anything if no power, so simulate in anticipation of added power
+        if (power == MIN_POWER)
+        {
+            tests["rotateCCW"].increasePower();
+            tests["rotateCW"].increasePower();
+        }
 
-        int currentSteps = current.stepsUntilCrash();
-        int rotateCCWSteps = rotateCCW.stepsUntilCrash();
-        int rotateCWSteps = rotateCW.stepsUntilCrash();
-        int slowerSteps = slower.stepsUntilCrash();
-        int fasterSteps = faster.stepsUntilCrash();
+        tests["rotateCCW"].rotate(MAX_ROTATE);
+        tests["rotateCW"].rotate(MIN_ROTATE);
 
-        cerr << "current Steps:" << currentSteps << " Distance:" << current.location.distance(target.center) << endl;
-        cerr << "rotateCCW Steps:" << rotateCCWSteps << " Distance:" << rotateCCW.location.distance(target.center) << endl;
-        cerr << "rotateCW Steps:" << rotateCWSteps << " Distance:" << rotateCW.location.distance(target.center) << endl;
-        cerr << "slower Steps:" << slowerSteps << " Distance:" << slower.location.distance(target.center) << endl;
-        cerr << "faster Steps:" << fasterSteps << " Distance:" << faster.location.distance(target.center) << endl;
+        tests["slower"].decreasePower();
+        tests["faster"].increasePower();
+
+        int bestScore = -10000000;
+        string bestTest = "NONE";
+        for (std::map<string, Lander>::iterator it = tests.begin(); it != tests.end(); ++it)
+        {
+            int score = it->second.score();
+
+            cerr << "test:" << it->first << " score:" << score << endl;
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestTest = it->first;
+            }
+        }
+
+        if (bestTest == "rotateCCW")
+        {
+            rotate(MAX_ROTATE);
+        }
+        else if (bestTest == "rotateCW")
+        {
+            rotate(MIN_ROTATE);
+        }
+        else if (bestTest == "slower")
+        {
+            decreasePower();
+        }
+        else if (bestTest == "faster")
+        {
+            increasePower();
+        }
     }
-	
 };
 
 unordered_map<int, pair<double, double>> trigAngle;
