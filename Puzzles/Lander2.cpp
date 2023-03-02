@@ -15,18 +15,12 @@ using namespace std;
 #define RAD_TO_DEG 57.2958279			//180.0f/3.14159f		// Used to convert radians to degrees
 #define DEG_TO_RAD 0.01745328			//3.14159f/180.0f		// Used to convert degrees to radians
 
-#define ROTATION_MIN -90
-#define ROTATION_MAX 90
-#define ROTATION_SPEED 15
-#define ROTATION_ADJUST_MIN -15
-#define ROTATION_ADJUST_MAX 15
-#define ROTATION_RANGE 31
-#define THRUST_MIN 0
-#define THRUST_MAX 4
-#define THRUST_SPEED 1
-#define THRUST_ADJUST_MIN -1
-#define THRUST_ADJUST_MAX 1
-#define THRUST_RANGE 3
+#define MIN_POWER 0
+#define MAX_POWER 4
+#define MAX_ROTATE 15
+#define MIN_ROTATE -15
+#define MAX_ROTATION 90
+#define MIN_ROTATION -90
 #define LANDING_H_SPEED 20
 #define LANDING_V_SPEED 40
 #define LANDING_ROTATION 0
@@ -38,23 +32,6 @@ using namespace std;
 
 #define TARGET_SCALAR 0.9
 #define TIMEOUT 0.100
-
-#define SCORE_DISTANCE_X		-5
-#define SCORE_DISTANCE_Y		-1
-#define SCORE_FUEL				1
-#define SCORE_LANDING_H_SPEED	-1000
-#define SCORE_LANDING_V_SPEED	-1000
-#define SCORE_LANDING_ROTATE	-10000
-#define SCORE_CRASHED			-100000
-#define SCORE_LANDED			100000
-
-//static default_random_engine randomEngine(clock());
-//static ranlux24 randomEngine(clock());
-static minstd_rand randomEngine(clock());
-static uniform_int_distribution<int> randomRotation{ROTATION_ADJUST_MIN, ROTATION_ADJUST_MAX};
-static uniform_int_distribution<int> randomThrust{THRUST_ADJUST_MIN, THRUST_ADJUST_MAX};
-static uniform_int_distribution<int> randomName{0, 10000};
-static uniform_real_distribution<double> randomDecimal{0, 1};
 
 // A coordinate holds position.  It can also be used for vector calculations
 class Coordinate
@@ -228,6 +205,71 @@ class Segment
 		points[1].x -= adjust;
 	}
 
+    // Given three collinear points p, q, r, the function checks if
+    // point q lies on line segment 'pr'
+    bool onSegment(Coordinate p, Coordinate q, Coordinate r)
+    {
+        return (q.x <= max(p.x, r.x) && q.x >= min(p.x, r.x) &&
+                q.y <= max(p.y, r.y) && q.y >= min(p.y, r.y));
+    }
+
+    // To find orientation of ordered triplet (p, q, r).
+    // The function returns following values
+    // 0 --> p, q and r are collinear
+    // 1 --> Clockwise
+    // 2 --> Counterclockwise
+    int orientation(Coordinate p, Coordinate q, Coordinate r)
+    {
+        int val = (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+    
+        if (val == 0)
+        {
+            return 0;  // collinear
+        }
+    
+        return (val > 0) ? 1: 2; // clock or counterclock wise
+    }
+
+    // The main function that returns true if line segment 'p1q1'
+    // and 'p2q2' intersect.
+    bool doIntersect(Coordinate p1, Coordinate q1, Coordinate p2, Coordinate q2)
+    {
+        // Find the four orientations needed for general and
+        // special cases
+        int o1 = orientation(p1, q1, p2);
+        int o2 = orientation(p1, q1, q2);
+        int o3 = orientation(p2, q2, p1);
+        int o4 = orientation(p2, q2, q1);
+    
+        // General case
+        if (o1 != o2 && o3 != o4)
+            return true;
+    
+        // Special Cases
+        // p1, q1 and p2 are collinear and p2 lies on segment p1q1
+        if (o1 == 0 && onSegment(p1, p2, q1)) return true;
+    
+        // p1, q1 and q2 are collinear and q2 lies on segment p1q1
+        if (o2 == 0 && onSegment(p1, q2, q1)) return true;
+    
+        // p2, q2 and p1 are collinear and p1 lies on segment p2q2
+        if (o3 == 0 && onSegment(p2, p1, q2)) return true;
+    
+        // p2, q2 and q1 are collinear and q1 lies on segment p2q2
+        if (o4 == 0 && onSegment(p2, q1, q2)) return true;
+    
+        return false; // Doesn't fall in any of the above cases
+    }
+
+    bool doIntersect(Segment first, Segment second)
+    {
+        return doIntersect(first.points[0], first.points[1], second.points[0], second.points[1]);
+    }
+
+    bool intersects(Segment test)
+    {
+        return doIntersect(test, *this);
+    }
 
 	friend ostream &operator<<(ostream &os, Segment const &m)
 	{
@@ -256,21 +298,46 @@ class Surface
 	{
 		segments.push_back(segment);
 	}
+
+    bool crash(Segment path)
+    {
+        for (std::vector<Segment>::iterator it = segments.begin() ; it != segments.end(); ++it)
+        {
+            if (path.intersects(*it))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 };
+
+Surface surface;
 
 class Lander
 {
 public:
 	Coordinate location;
-	Coordinate vector;
+	Coordinate velocity;
 	int fuel;
 	int rotation; // Degrees
 	int power;
 	Segment target;
 
-
 	Lander()
 	{}
+
+	Lander& operator=(const Lander& other)
+	{
+		location = other.location;
+		velocity = other.velocity;
+        fuel = other.fuel;
+        rotation = other.rotation;
+        power = other.power;
+        target = other.target;
+		return *this;
+	}
 
 	void updateTarget(Segment _target)
 	{
@@ -280,7 +347,7 @@ public:
 	void update(int X, int Y, int hSpeed, int vSpeed, int _fuel, int _rotation, int _power)
 	{
 		location.update(X, Y);
-		vector.update(hSpeed, vSpeed);
+		velocity.update(hSpeed, vSpeed);
 		fuel = _fuel;
 		rotation = _rotation;
 		power = _power;
@@ -332,8 +399,8 @@ public:
 	bool landingState()
 	{
 		return rotation == 0
-			&& abs(vector.x) <= 20
-			&& abs(vector.y) <= 40;
+			&& abs(velocity.x) <= 20
+			&& abs(velocity.y) <= 40;
 	}
 
 	void findSolution()
@@ -354,19 +421,67 @@ cerr << "findSolution location=" << location << " target=" << target << endl;
 			goVertical();
 			decreasePower();
 		}
+
+        simulate();
 	}
 
-private:
-	const int MIN_POWER = 0;
-	const int MAX_POWER = 4;
-	const int MAX_ROTATE = 15;
-	const int MIN_ROTATE = -15;
-	const int MAX_ROTATION = 90;
-	const int MIN_ROTATION = -90;
+    bool step()
+    {
+        Coordinate oldLocation = location;
+        fuel -= power;
+        velocity.y -= GRAVITY;
+        velocity.y += power * sin(rotation);
+        velocity.x += power * cos(rotation);
+        location += velocity;
+        Segment path(oldLocation, location);
+
+        if (surface.crash(path)) return true;
+        if (location.x >= BOUNDS_X_MAX) return true;
+        if (location.x <= BOUNDS_X_MIN) return true;
+        if (location.y >= BOUNDS_Y_MAX) return true;
+        if (location.y <= BOUNDS_Y_MIN) return true;
+
+        return false;
+    }
+
+    int stepsUntilCrash()
+    {
+        int steps = 0;
+        while (!step())
+        {
+            steps++;
+        }
+
+        return steps;
+    }
+
+    void simulate()
+    {
+        Lander current = *this;
+        Lander rotateCCW = *this;
+        Lander rotateCW = *this;
+        Lander slower = *this;
+        Lander faster = *this;
+
+        rotateCCW.rotate(MAX_ROTATE);
+        rotateCW.rotate(MIN_ROTATE);
+        slower.decreasePower();
+        faster.increasePower();
+
+        int currentSteps = current.stepsUntilCrash();
+        int rotateCCWSteps = rotateCCW.stepsUntilCrash();
+        int rotateCWSteps = rotateCW.stepsUntilCrash();
+        int slowerSteps = slower.stepsUntilCrash();
+        int fasterSteps = faster.stepsUntilCrash();
+
+        cerr << "current Steps:" << currentSteps << " Distance:" << current.location.distance(target.center) << endl;
+        cerr << "rotateCCW Steps:" << rotateCCWSteps << " Distance:" << rotateCCW.location.distance(target.center) << endl;
+        cerr << "rotateCW Steps:" << rotateCWSteps << " Distance:" << rotateCW.location.distance(target.center) << endl;
+        cerr << "slower Steps:" << slowerSteps << " Distance:" << slower.location.distance(target.center) << endl;
+        cerr << "faster Steps:" << fasterSteps << " Distance:" << faster.location.distance(target.center) << endl;
+    }
 	
 };
-
-Surface surface;
 
 unordered_map<int, pair<double, double>> trigAngle;
 
