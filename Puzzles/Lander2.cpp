@@ -33,6 +33,11 @@ using namespace std;
 #define TARGET_SCALAR 0.9
 #define TIMEOUT 0.100
 
+#define CRASH_CHECK_STEPS 100
+#define CRASH_DISTANCE_SCORE 1
+#define CRASH_AVOIDED_SCORE 10000000;
+#define TARGET_DISTANCE_X_SCORE -1;
+
 // A coordinate holds position.  It can also be used for vector calculations
 class Coordinate
 {
@@ -299,17 +304,18 @@ class Surface
 		segments.push_back(segment);
 	}
 
-    bool crash(Segment path)
+    // Less than 0 means no crash
+    double crashDistance(Segment path)
     {
         for (std::vector<Segment>::iterator it = segments.begin(); it != segments.end(); ++it)
         {
             if (path.intersects(*it))
             {
-                return true;
+                return path.points[1].distance(it->center);
             }
         }
 
-        return false;
+        return -1;
     }
 };
 
@@ -409,7 +415,7 @@ public:
         simulate();
 	}
 
-    bool step()
+    double stepCrash()
     {
         Coordinate oldLocation = location;
         fuel -= power;
@@ -420,28 +426,20 @@ public:
         location += velocity;
         Segment path(oldLocation, location);
 
-        if (surface.crash(path)) return true;
-        if (location.x >= BOUNDS_X_MAX) return true;
-        if (location.x <= BOUNDS_X_MIN) return true;
-        if (location.y >= BOUNDS_Y_MAX) return true;
-        if (location.y <= BOUNDS_Y_MIN) return true;
-
-        return false;
+        return surface.crashDistance(path);
     }
 
-    int stepsUntilCrash(int maxSteps)
+    double distanceToCrash(int maxSteps)
     {
         int steps = 0;
-        while (!step())
+        double lastStep = -1;
+        while (steps < maxSteps && lastStep < 0)
         {
+            lastStep = stepCrash();
             steps++;
-            if (steps > maxSteps)
-            {
-                break;
-            }
         }
 
-        return steps;
+        return lastStep;
     }
 
     double distanceToTarget()
@@ -451,17 +449,18 @@ public:
 
     int score()
     {
-        int crashStepMax = 10;
-        int crashMultiplier = 0;
-        int crashSteps = stepsUntilCrash(crashStepMax + 1);
-        if (crashSteps < crashStepMax)
+        int crashStepMax = CRASH_CHECK_STEPS;
+        int crashMultiplier = CRASH_DISTANCE_SCORE;
+        int crashScore = CRASH_AVOIDED_SCORE;
+        double crashSteps = distanceToCrash(crashStepMax + 1);
+        if (crashSteps >= 0)
         {
-            crashMultiplier = 1000;
+            crashScore = crashSteps * crashMultiplier;
         }
 
         int distanceX = abs(location.x - target.center.x);
 
-        return crashSteps * crashMultiplier + distanceX * -1;
+        return crashScore + distanceX * TARGET_DISTANCE_X_SCORE;
     }
 
     void simulate()
@@ -571,6 +570,13 @@ int main()
 
 		previous = current;
 	}
+
+    // Add boundaries to surface
+    surface.addSegment(Segment(Coordinate(BOUNDS_X_MIN, BOUNDS_Y_MIN), Coordinate(BOUNDS_X_MIN, BOUNDS_Y_MAX)));
+    surface.addSegment(Segment(Coordinate(BOUNDS_X_MIN, BOUNDS_Y_MAX), Coordinate(BOUNDS_X_MAX, BOUNDS_Y_MAX)));
+    surface.addSegment(Segment(Coordinate(BOUNDS_X_MAX, BOUNDS_Y_MAX), Coordinate(BOUNDS_X_MAX, BOUNDS_Y_MIN)));
+    surface.addSegment(Segment(Coordinate(BOUNDS_X_MAX, BOUNDS_Y_MIN), Coordinate(BOUNDS_X_MIN, BOUNDS_Y_MIN)));
+
 
 	bool initialized = false;
 
