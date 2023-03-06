@@ -33,10 +33,11 @@ using namespace std;
 #define TARGET_SCALAR 0.9
 #define TIMEOUT 0.100
 
-#define CRASH_CHECK_STEPS 100
+#define CRASH_CHECK_STEPS 25
 #define CRASH_DISTANCE_SCORE 1
 #define CRASH_AVOIDED_SCORE 10000000;
-#define TARGET_DISTANCE_X_SCORE -1;
+#define TARGET_DISTANCE_X_SCORE -10;
+#define TARGET_DISTANCE_Y_SCORE -5;
 
 // A coordinate holds position.  It can also be used for vector calculations
 class Coordinate
@@ -276,6 +277,11 @@ class Segment
         return doIntersect(test, *this);
     }
 
+    bool isUnder(Coordinate test)
+    {
+        return test.x > points[0].x && test.x < points[1].x;
+    }
+
 	friend ostream &operator<<(ostream &os, Segment const &m)
 	{
 		return os << "[0]" << m.points[0] << "{c}" << m.center << "[1]" << m.points[1];
@@ -415,7 +421,7 @@ public:
         simulate();
 	}
 
-    double stepCrash()
+    Segment step()
     {
         Coordinate oldLocation = location;
 
@@ -430,9 +436,12 @@ public:
         velocity.x += power * sin((double)-rotation * DEG_TO_RAD);
 
         location += velocity;
-        Segment path(oldLocation, location);
+        return Segment(oldLocation, location);
+    }
 
-        return surface.crashDistance(path);
+    double stepCrash()
+    {
+        return surface.crashDistance(step());
     }
 
     double distanceToCrash(int maxSteps)
@@ -453,76 +462,93 @@ public:
         location.distance(target.center);
     }
 
-    int score()
+    void score()
     {
-        int crashStepMax = CRASH_CHECK_STEPS;
-        int crashMultiplier = CRASH_DISTANCE_SCORE;
         int crashScore = CRASH_AVOIDED_SCORE;
-        double crashSteps = distanceToCrash(crashStepMax + 1);
-        if (crashSteps >= 0)
+        if (!target.isUnder(location))
         {
-            crashScore = crashSteps * crashMultiplier;
-        }
-
-        int distanceX = abs(location.x - target.center.x);
-
-        return crashScore + distanceX * TARGET_DISTANCE_X_SCORE;
-    }
-
-    void simulate()
-    {
-        map<string, Lander> tests;
-        tests["Current"] = *this;
-        tests["rotateCCW"] = *this;
-        tests["rotateCW"] = *this;
-        tests["slower"] = *this;
-        tests["faster"] = *this;
-
-        // Rotation does not change anything if no power, so simulate in anticipation of added power
-        if (power == MIN_POWER)
-        {
-            tests["rotateCCW"].increasePower();
-            tests["rotateCW"].increasePower();
-        }
-
-        tests["rotateCCW"].rotate(MAX_ROTATE);
-        tests["rotateCW"].rotate(MIN_ROTATE);
-
-        tests["slower"].decreasePower();
-        tests["faster"].increasePower();
-
-        int bestScore = -10000000;
-        string bestTest = "NONE";
-        for (std::map<string, Lander>::iterator it = tests.begin(); it != tests.end(); ++it)
-        {
-            int score = it->second.score();
-
-            cerr << "test:" << it->first << " score:" << score << endl;
-
-            if (score > bestScore)
+            int crashStepMax = CRASH_CHECK_STEPS;
+            int crashMultiplier = CRASH_DISTANCE_SCORE;
+            Lander crasher = *this;
+            double crashSteps = crasher.distanceToCrash(crashStepMax + 1);
+            if (crashSteps >= 0)
             {
-                bestScore = score;
-                bestTest = it->first;
+                crashScore = crashSteps * crashMultiplier;
             }
         }
 
-        if (bestTest == "rotateCCW")
-        {
-            rotate(MAX_ROTATE);
-        }
-        else if (bestTest == "rotateCW")
-        {
-            rotate(MIN_ROTATE);
-        }
-        else if (bestTest == "slower")
-        {
-            decreasePower();
-        }
-        else if (bestTest == "faster")
-        {
-            increasePower();
-        }
+        Lander mover = *this;
+        mover.step();
+        int distanceX = abs(mover.location.x - target.center.x);
+        int distanceY = abs(mover.location.y - target.center.y);
+
+        myScore = crashScore + distanceX * TARGET_DISTANCE_X_SCORE + distanceY * TARGET_DISTANCE_Y_SCORE;
     }
+
+    int simulate()
+    {
+        // W = rotate counter clockwise (widdershins)
+        // D = rotate clockwise (deosil)
+        // S = slower
+        // F = faster
+
+        map<string, Lander> tests;
+        tests[""] = *this;
+        tests["W"] = *this;
+        tests["D"] = *this;
+        tests["S"] = *this;
+        tests["F"] = *this;
+        tests["WS"] = *this;
+        tests["WF"] = *this;
+        tests["DS"] = *this;
+        tests["DF"] = *this;
+
+        for (std::map<string, Lander>::iterator it = tests.begin(); it != tests.end(); ++it)
+        {
+            if (it->first.find('W') != string::npos)
+            {
+                it->second.rotate(MAX_ROTATE);
+            }
+            else if (it->first.find('D') != string::npos)
+            {
+                it->second.rotate(MIN_ROTATE);
+            }
+
+            if (it->first.find('S') != string::npos)
+            {
+                it->second.decreasePower();
+            }
+            else if (it->first.find('F') != string::npos)
+            {
+                it->second.increasePower();
+            }
+        }
+
+        int bestScore = -10000000;
+        string bestTest = "";
+        int numWithBestScore = 0;
+        for (std::map<string, Lander>::iterator it = tests.begin(); it != tests.end(); ++it)
+        {
+            it->second.score();
+
+            cerr << "test:" << it->first << " score:" << it->second.myScore;
+
+            if (it->second.myScore > bestScore)
+            {
+                bestScore = it->second.myScore;
+                bestTest = it->first;
+                cerr << " BEST";
+            }
+
+            cerr << endl;
+        }
+
+        rotation = tests[bestTest].rotation;
+        power = tests[bestTest].power;
+    }
+
+private:
+    int myScore;
 };
 
 unordered_map<int, pair<double, double>> trigAngle;
