@@ -45,7 +45,7 @@ class Coordinate
 public:
 	double x;
 	double y;
-    
+
 	Coordinate() : x(-1), y(-1)
 	{}
     
