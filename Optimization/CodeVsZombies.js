@@ -44,7 +44,7 @@ class Coordinate {
         var direction = this.degreeToRadians(degree);
         this.x += Math.floor(Math.cos(direction) * speed);
         this.y += Math.floor(Math.sin(direction) * speed);
-    }
+   }
 
     // Returns the midpoint between this coordinate and other coordinate
     midpointTo(other) {
@@ -53,6 +53,22 @@ class Coordinate {
 
     inBounds() {
         return this.x >= 0 && this.x <= XBoundary && this.y >= 0 && this.y <= YBoundary;
+    }
+
+    toString() {
+        if (this.x < 0) {
+            this.x = 0;
+        } else if (this.x > XBoundary) {
+            this.x = XBoundary;
+        }
+
+        if (this.y < 0) {
+            this.y = 0;
+        } else if (this.y > YBoundary) {
+            this.y = YBoundary;
+        }
+        
+        return this.x + " " + this.y;
     }
 }
 
@@ -281,7 +297,7 @@ class Player extends Person {
             aliveHumans.forEach(function (humanId) {
                 stillLiving += humanId + ", ";
             });
-            console.error("simulateAssault targetId: " + targetId + " score: " + totalScore + " aliveHumans: " + stillLiving  + " playerSteps: " + intercept.playerSteps  + " zombieSteps: " + intercept.zombieSteps + " point: " + intercept.bestLocation.x + "," + intercept.bestLocation.y);
+            console.error("simulateAssault targetId: " + targetId + " score: " + totalScore + " aliveHumans: " + stillLiving  + " playerSteps: " + intercept.playerSteps  + " zombieSteps: " + intercept.zombieSteps + " point: " + intercept.bestLocation);
         }
         return totalScore;
     }
@@ -343,7 +359,7 @@ class Player extends Person {
         var zombie = this.myZombies.get(zombieId);
         var zombiesTarget = Zombie.findClosestHuman(zombie);
 
-        var cacheKey = "getIntercept"+this.location.x+","+this.location.y+","+zombie.location.x+","+zombie.location.y;
+        var cacheKey = "getIntercept"+this.location+","+zombie.location;
         if (zombiesTarget instanceof Person) {
             cacheKey += ","+zombiesTarget.id;
         }
@@ -429,21 +445,19 @@ class Player extends Person {
     }
 
     outputTurnTarget() {
-        Player.updateTarget(this);
-
         var myTarget = zombies.get(this.bestTargetId);
         if (myTarget instanceof Zombie) {
             var myTargetLocation = this.getTargetLocation(myTarget.id)
-            console.log(myTargetLocation.x + ' ' + myTargetLocation.y + ' Gonna kill ' + this.bestTargetId);
+            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
         } else {
-            console.log(this.location.x + ' ' + this.location.y + ' No Target ' + this.bestTargetId);
+            console.log(this.location + ' No Target ' + this.bestTargetId);
         }
     }
 
     outputTurnAngle() {
         var nextLocation = new Coordinate(this.location.x, this.location.y);
         nextLocation.moveAngle(this.bestHeading, this.speed);
-        console.log(nextLocation.x + ' ' + nextLocation.y + ' My heading is ' + this.bestHeading);
+        console.log(nextLocation + ' My heading is ' + this.bestHeading);
     }
 
     outputTurn() {
@@ -451,13 +465,6 @@ class Player extends Person {
         var targetingPlayer = this.clone();
         var angleScore = Player.updateAngle(anglePlayer);
         var targetScore = Player.updateTarget(targetingPlayer);
-
-        var aliveZombies = 0;
-        player.myZombies.forEach(function (zombie) {
-            if (!zombie.dead) {
-                aliveZombies++;
-            }
-        });
 
         if (angleScore > targetScore) {
             anglePlayer.outputTurnAngle();
@@ -568,7 +575,7 @@ while (true) {
     humans.set(player.id, player);
     
 //    player.outputTurnAngle();
-    player.outputTurnTarget();
-//    player.outputTurn();
+//    player.outputTurnTarget();
+    player.outputTurn();
 //    player.takeTurn();
 }
