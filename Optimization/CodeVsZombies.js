@@ -9,6 +9,8 @@ const ZombieKillRange = 0; //400;
 const DefaultSpeed = 0;
 const TurnsToSimulate = 50;
 
+const ShowDebug = false;
+
 class Coordinate {
     constructor(x, y) {
         this.x = x;
@@ -28,7 +30,7 @@ class Coordinate {
     }
 
     moveToTarget(target, speed) {
-        if (Math.floor(this.distanceTo(target) <= speed)) {
+        if (Math.ceil(this.distanceTo(target) <= speed)) {
             this.x = target.x;
             this.y = target.y;
         } else {
@@ -109,11 +111,11 @@ class Zombie extends Person {
 
         var myKills = [];
         this.myHumans.forEach(function (human) {
-            if (human.dead) {
+            if (human.dead || human.id == -1) {
                 return;
             }
             var distance = this.location.distanceTo(human.location);
-            if (distance <= ZombieKillRange) {
+            if (distance == 0) {
                 myKills.push(human.id);
                 human.dead = true;
             }
@@ -246,12 +248,10 @@ class Player extends Person {
         var intercept = player.getIntercept(targetId);
         if (intercept.playerSteps > intercept.zombieSteps) {
             totalScore += TurnsToSimulate * -1000;
-        } else if (intercept.playerSteps == intercept.zombieSteps) {
-            totalScore += TurnsToSimulate * 1000;
         }
 
         totalScore += intercept.playerSteps * -1000;
-
+        
         for (var i = 0; i < TurnsToSimulate; i++) {
             player.myZombies.forEach(function (zombie) {
                 zombie.step();
@@ -265,17 +265,24 @@ class Player extends Person {
             totalScore += Player.findScoreThisTurn(player, killCount);
         }
 
-        var aliveHumans = 0;
+        var aliveHumans = [];
         player.myHumans.forEach(function (human) {
             if (!human.dead && human.id != player.id) {
-                aliveHumans++;
+                aliveHumans.push(human.id);
             }
         });
 
-        if (aliveHumans == 0) {
+        if (aliveHumans.length == 0) {
             totalScore = -9999999999;
         }
 
+        if (ShowDebug) {
+            var stillLiving = "";
+            aliveHumans.forEach(function (humanId) {
+                stillLiving += humanId + ", ";
+            });
+            console.error("simulateAssault targetId: " + targetId + " score: " + totalScore + " aliveHumans: " + stillLiving  + " playerSteps: " + intercept.playerSteps  + " zombieSteps: " + intercept.zombieSteps + " point: " + intercept.bestLocation.x + "," + intercept.bestLocation.y);
+        }
         return totalScore;
     }
 
@@ -345,7 +352,7 @@ class Player extends Person {
             return cache.get(cacheKey);
         }
 
-        var bestLocation = this.location;
+        var bestLocation = new Coordinate(this.location.x, this.location.y);
         var bestNumSteps = 10000;
         var zombieSteps = 10000;
 
@@ -358,7 +365,7 @@ class Player extends Person {
             var distanceToHuman = zombie.location.distanceTo(zombiesTarget.location);
             bestNumSteps = 0;
             zombieSteps = Math.ceil(distanceToHuman / zombie.speed) + 1;
-            for (var zombieDistance = 0; zombieDistance <= (distanceToHuman - ZombieKillRange); zombieDistance += zombie.speed) {
+            for (var zombieDistance = 0; zombieDistance <= distanceToHuman; zombieDistance += zombie.speed) {
                 // For each location the zombie will be at
                 var zombieLocation = new Coordinate(zombie.location.x, zombie.location.y);
                 zombieLocation.moveToTarget(zombiesTarget.location, zombieDistance);
