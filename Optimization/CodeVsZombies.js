@@ -124,6 +124,8 @@ class Zombie extends Person {
 
 var zombies = new Map();
 
+var cache = new Map();
+
 class Player extends Person {
     targetId = -1;
     bestHeading = 0;
@@ -136,6 +138,25 @@ class Player extends Person {
         this.speed = PlayerSpeed;
         this.myZombies = zombies;
         this.myHumans = humans;
+    }
+
+    static findCentroid(zombies) {
+        var x = 0;
+        var y = 0;
+        var denominator = 0;
+
+        zombies.forEach(function (zombie) {
+            if (zombie.dead) {
+                return;
+            }
+            x += zombie.location.x;
+            y += zombie.location.y;
+            denominator++;
+        });
+        if (denominator == 0) {
+            return new Coordinate(0, 0);
+        }
+        return new Coordinate(x / denominator, y / denominator);
     }
 
     clone() {
@@ -203,7 +224,7 @@ class Player extends Person {
 
         var aliveHumans = 0;
         player.myHumans.forEach(function (human) {
-            if (!human.dead) {
+            if (!human.dead && human.id != player.id) {
                 aliveHumans++;
             }
         });
@@ -215,11 +236,21 @@ class Player extends Person {
         return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount);
     }
 
-    static simulateAssault(player, target) {
-        player.targetId = target.id;
+    static simulateAssault(player, targetId) {
+        var target = player.myZombies.get(targetId);
+        if (target.dead) {
+            return -1000;
+        }
 
         var killCount = 0;
         var totalScore = 0;
+        player.targetId = targetId;
+
+        var intercept = player.getIntercept(targetId);
+        if (intercept.playerSteps >= intercept.zombieSteps - 1) {
+            totalScore += -1000;
+        }
+
         while (killCount < 1) {
             player.myZombies.forEach(function (zombie) {
                 zombie.step();
@@ -227,12 +258,7 @@ class Player extends Person {
             player.step();
             killCount = player.kill();
             player.myZombies.forEach(function (zombie) {
-                var zombieKills = zombie.eat();
-                player.myHumans.forEach(function (human) {
-                    if (zombieKills == human.id) {
-                        human.dead = true;
-                    }
-                }.bind(player));
+                zombie.eat();
             });
 
 
@@ -271,7 +297,7 @@ class Player extends Person {
             }
 
             var playerClone = player.clone();
-            var thisScore = Player.simulateAssault(playerClone, zombie);
+            var thisScore = Player.simulateAssault(playerClone, zombie.id);
             if (thisScore > bestScore) {
                 bestScore = thisScore;
                 player.bestTargetId = zombie.id;
@@ -295,34 +321,62 @@ class Player extends Person {
         return bestScore;        
     }
 
-
-
-    getTargetLocation(zombieId) {
+    getIntercept(zombieId) {
         var zombie = this.myZombies.get(zombieId);
         var zombiesTarget = Zombie.findClosestHuman(zombie);
-        if (zombiesTarget instanceof Person && zombiesTarget.id != this.id) {
+
+        var cacheKey = "getIntercept"+this.location.x+","+this.location.y+","+zombie.location.x+","+zombie.location.y;
+        if (zombiesTarget instanceof Person) {
+            cacheKey += ","+zombiesTarget.id;
+        }
+
+        if (cache.has(cacheKey)) {
+            return cache.get(cacheKey);
+        }
+
+        var bestLocation = this.location;
+        var numSteps = 10000;
+        var zombieSteps = 10000;
+
+        var centerOfZombies = Player.findCentroid(this.myZombies);
+
+        // Find intercept point between the zombie and the target.
+        if (zombiesTarget instanceof Person) {
+            var minDistanceToCenter = 100000;
+            var distanceToCenter = 10000;
             var distanceToHuman = zombie.location.distanceTo(zombiesTarget.location);
             var minSteps = 100000;
-            var bestLocation = new Coordinate(0, 0);
-            for (var zombieStep = 0; zombieStep <= distanceToHuman; zombieStep += zombie.speed) {
+            zombieSteps = Math.ceil(distanceToHuman / zombie.speed) + 1;
+            for (var zombieDistance = 0; zombieDistance <= distanceToHuman; zombieDistance += zombie.speed) {
                 var tempLocation = new Coordinate(zombie.location.x, zombie.location.y);
-                tempLocation.moveToTarget(zombiesTarget.location, zombieStep);
+                tempLocation.moveToTarget(zombiesTarget.location, zombieDistance);
                 var distanceToZombie = this.location.distanceTo(tempLocation);
-                var numSteps = 0;
+                numSteps = 0;
                 for (var playerStep = 0; playerStep <= (distanceToZombie - PlayerKillRange); playerStep += player.speed) {
                     numSteps++;
                 }
-                if (numSteps < minSteps) {
-                    minSteps = numSteps;
-                    bestLocation.x = tempLocation.x;
-                    bestLocation.y = tempLocation.y;
-                }
+                distanceToCenter = centerOfZombies.distanceTo(tempLocation);
             }
 
-            return bestLocation;
-        } else {
-            return zombie.location;
+            if (distanceToCenter < minDistanceToCenter) {
+                minDistanceToCenter = distanceToCenter;
+                bestLocation.x = tempLocation.x;
+                bestLocation.y = tempLocation.y;
+            }
         }
+
+        cache[cacheKey] = [bestLocation, numSteps, zombieSteps];
+
+        return {
+            'bestLocation': bestLocation,
+            'playerSteps': numSteps,
+            'zombieSteps': zombieSteps
+        }
+    }
+
+    getTargetLocation(zombieId) {
+        var intercept = this.getIntercept(zombieId);
+        return intercept.bestLocation;
     }
 
     step() {
@@ -456,6 +510,8 @@ var player = new Player(-1, 0, 0);
 
 // game loop
 while (true) {
+    cache = new Map();
+
     var inputs = readline().split(' ');
     const x = parseInt(inputs[0]);
     const y = parseInt(inputs[1]);
