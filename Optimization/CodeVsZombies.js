@@ -5,8 +5,9 @@ const YBoundary = 9000;
 const PlayerSpeed = 1000;
 const PlayerKillRange = 2000;
 const ZombieSpeed = 400;
-const ZombieKillRange = 400;
+const ZombieKillRange = 0; //400;
 const DefaultSpeed = 0;
+const TurnsToSimulate = 50;
 
 class Coordinate {
     constructor(x, y) {
@@ -230,28 +231,28 @@ class Player extends Person {
         });
 
         if (aliveHumans == 0) {
-            return -1000000;
+            return -9000000;
         }
 
-        return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount);
+        return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) + aliveHumans * 1000;
     }
 
     static simulateAssault(player, targetId) {
-        var target = player.myZombies.get(targetId);
-        if (target.dead) {
-            return -1000;
-        }
-
         var killCount = 0;
         var totalScore = 0;
         player.targetId = targetId;
 
+        // If the zombie is closer to the target than the player, it's a bad idea to move towards it.
         var intercept = player.getIntercept(targetId);
-        if (intercept.playerSteps >= intercept.zombieSteps - 1) {
-            totalScore += -1000;
+        if (intercept.playerSteps > intercept.zombieSteps) {
+            totalScore += TurnsToSimulate * -1000;
+        } else if (intercept.playerSteps == intercept.zombieSteps) {
+            totalScore += TurnsToSimulate * 1000;
         }
 
-        while (killCount < 1) {
+        totalScore += intercept.playerSteps * -1000;
+
+        for (var i = 0; i < TurnsToSimulate; i++) {
             player.myZombies.forEach(function (zombie) {
                 zombie.step();
             });
@@ -261,8 +262,18 @@ class Player extends Person {
                 zombie.eat();
             });
 
-
             totalScore += Player.findScoreThisTurn(player, killCount);
+        }
+
+        var aliveHumans = 0;
+        player.myHumans.forEach(function (human) {
+            if (!human.dead && human.id != player.id) {
+                aliveHumans++;
+            }
+        });
+
+        if (aliveHumans == 0) {
+            totalScore = -9999999999;
         }
 
         return totalScore;
@@ -335,7 +346,7 @@ class Player extends Person {
         }
 
         var bestLocation = this.location;
-        var numSteps = 10000;
+        var bestNumSteps = 10000;
         var zombieSteps = 10000;
 
         var centerOfZombies = Player.findCentroid(this.myZombies);
@@ -345,31 +356,34 @@ class Player extends Person {
             var minDistanceToCenter = 100000;
             var distanceToCenter = 10000;
             var distanceToHuman = zombie.location.distanceTo(zombiesTarget.location);
-            var minSteps = 100000;
+            bestNumSteps = 0;
             zombieSteps = Math.ceil(distanceToHuman / zombie.speed) + 1;
-            for (var zombieDistance = 0; zombieDistance <= distanceToHuman; zombieDistance += zombie.speed) {
-                var tempLocation = new Coordinate(zombie.location.x, zombie.location.y);
-                tempLocation.moveToTarget(zombiesTarget.location, zombieDistance);
-                var distanceToZombie = this.location.distanceTo(tempLocation);
-                numSteps = 0;
-                for (var playerStep = 0; playerStep <= (distanceToZombie - PlayerKillRange); playerStep += player.speed) {
-                    numSteps++;
-                }
-                distanceToCenter = centerOfZombies.distanceTo(tempLocation);
-            }
+            for (var zombieDistance = 0; zombieDistance <= (distanceToHuman - ZombieKillRange); zombieDistance += zombie.speed) {
+                // For each location the zombie will be at
+                var zombieLocation = new Coordinate(zombie.location.x, zombie.location.y);
+                zombieLocation.moveToTarget(zombiesTarget.location, zombieDistance);
 
-            if (distanceToCenter < minDistanceToCenter) {
-                minDistanceToCenter = distanceToCenter;
-                bestLocation.x = tempLocation.x;
-                bestLocation.y = tempLocation.y;
+                // Find the number of steps the player will need to take to get to that location.
+                var distanceToZombie = this.location.distanceTo(zombieLocation);
+                var numSteps = Math.ceil((distanceToZombie - PlayerKillRange) / player.speed) + 1;
+
+                // Find the distance from the center of the zombies to the zombie's location.
+                distanceToCenter = centerOfZombies.distanceTo(zombieLocation);
+
+                if (distanceToCenter < minDistanceToCenter) {
+                    minDistanceToCenter = distanceToCenter;
+                    bestLocation.x = zombieLocation.x;
+                    bestLocation.y = zombieLocation.y;
+                    bestNumSteps = numSteps;
+                }
             }
         }
 
-        cache[cacheKey] = [bestLocation, numSteps, zombieSteps];
+        cache[cacheKey] = [bestLocation, bestNumSteps, zombieSteps];
 
         return {
             'bestLocation': bestLocation,
-            'playerSteps': numSteps,
+            'playerSteps': bestNumSteps,
             'zombieSteps': zombieSteps
         }
     }
