@@ -12,7 +12,7 @@ const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
-const ShowDebug = false;
+const ShowDebug = true;
 
 class Coordinate {
     constructor(x, y) {
@@ -252,7 +252,7 @@ class Player extends Person {
         });
 
         if (aliveHumans == 0) {
-            return -9000000;
+//            return -9000000;
         }
 
         return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) + aliveHumans * 1000;
@@ -261,6 +261,7 @@ class Player extends Person {
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
         var totalScore = 0;
+
         for (var i = 0; i < TurnsToSimulate; i++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
                 zombie.step();
@@ -281,17 +282,15 @@ class Player extends Person {
             }
         });
 
-        if (aliveHumans.length == 0) {
-            totalScore = -9999999999;
-        }
-
         if (ShowDebug) {
             var stillLiving = "";
             aliveHumans.forEach(function (humanId) {
                 stillLiving += humanId + ", ";
             });
 
-            console.error("Score: " + totalScore + " Humans: " + stillLiving)
+            if (pointScores.size > 200) {
+                console.error("Score: " + totalScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation + " pointScores: " + pointScores.size);
+            }
         }
 
         return totalScore;
@@ -332,24 +331,30 @@ class Player extends Person {
     }
 
     static updateTarget(player) {
+        console.error("updateTarget A");
         if (this.dead) {
             return;
         }
 
-        var bestScore = 0;
+        console.error("updateTarget B");
+        var bestScore = -999999999;
         player.myZombies.forEach(function (zombie) {
             if (zombie.dead) {
                 return;
             }
+            console.error("updateTarget C");
 
             var playerClone = player.clone();
             var thisScore = Player.simulateAssault(playerClone, zombie.id);
+            console.error("updateTarget D", bestScore, thisScore);
             if (thisScore > bestScore) {
                 bestScore = thisScore;
+                console.error("bestScore: " + bestScore + " zombie: " + zombie.id);
                 player.bestTargetId = zombie.id;
             }
 
         }.bind(player));
+        console.error("updateTarget E");
 
         return bestScore;
     }
@@ -415,7 +420,6 @@ class Player extends Person {
         }
 
         cache.set(cacheKey, [bestLocation, bestNumSteps, zombieSteps]);
-//        cache[cacheKey] = [bestLocation, bestNumSteps, zombieSteps];
 
         return {
             'bestLocation': bestLocation,
@@ -464,8 +468,9 @@ class Player extends Person {
     outputTurnTarget() {
         var myTarget = zombies.get(this.bestTargetId);
         if (myTarget instanceof Zombie) {
-            var myTargetLocation = this.getTargetLocation(myTarget.id)
-            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
+//            var myTargetLocation = this.getTargetLocation(myTarget.id)
+//            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
+            console.log(myTarget.location + ' Gonna kill ' + this.bestTargetId);
         } else {
             console.log(this.location + ' No Target ' + this.bestTargetId);
         }
@@ -616,17 +621,15 @@ class Tile {
 
         if (!(pointScores.has(key))) {
             var score = Player.simulate(player, this.center);
-            if (this.isLowestResolution()) {
-                console.error("Storing score for " + key + " " + score);
-            }
             pointScores.set(key, score);
         }
 
         return pointScores.get(key);
     }
 
-    getBestScore() {
+    getBestTile() {
         if (this.isLowestResolution()) {
+            console.error("best tile:", this.center, this.findScore());
             return this;
         }
 
@@ -635,7 +638,7 @@ class Tile {
         }
         
         if (this.bestTiles[0] instanceof Tile) {
-            return this.bestTiles[0].getBestScore();
+            return this.bestTiles[0].getBestTile();
         }
 
         return this;
@@ -650,7 +653,6 @@ class Tile {
 while (true) {
     cache = new Map();
     pointScores = new Map();
-    var board = new Tile(0, 0, 16000);
 
     var inputs = readline().split(' ');
     const x = parseInt(inputs[0]);
@@ -672,6 +674,7 @@ while (true) {
     zombies = new Map();
     for (let i = 0; i < zombieCount; i++) {
         var inputs = readline().split(' ');
+
         const zombieId = parseInt(inputs[0]);
         const zombieX = parseInt(inputs[1]);
         const zombieY = parseInt(inputs[2]);
@@ -691,7 +694,15 @@ while (true) {
     //    player.outputTurn();
     //    player.takeTurn();
 
-    board.expand(MaxResolution);
-    var bestTile = board.getBestScore();
-    console.log(bestTile.center + ' Target: ' + bestTile.center);
+
+    if (zombies.size < 2) {
+        console.error("zombies: " + zombies.size + " player.myZombies: " + player.myZombies.size);
+        Player.updateTarget(player);
+        player.outputTurnTarget();
+    } else {        
+        var board = new Tile(0, 0, 16000);
+        board.expand(MaxResolution);
+        var bestTile = board.getBestTile();
+        console.log(bestTile.center + ' Target: ' + bestTile.center);
+    }
 }
