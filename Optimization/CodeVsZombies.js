@@ -5,10 +5,13 @@ const YBoundary = 9000;
 const PlayerSpeed = 1000;
 const PlayerKillRange = 2000;
 const ZombieSpeed = 400;
-const ZombieKillRange = 0; //400;
+const ZombieKillRange = 0;
 const DefaultSpeed = 0;
-const TurnsToSimulate = 50;
+const TurnsToSimulate = 41; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
+const MaxResolution = 1000;
+const MinResolution = 1;
+const ResolutionFactor = 10;
 const ShowDebug = false;
 
 class Coordinate {
@@ -287,7 +290,8 @@ class Player extends Person {
             aliveHumans.forEach(function (humanId) {
                 stillLiving += humanId + ", ";
             });
-            console.error("simulateAssault targetId: " + targetId + " score: " + totalScore + " aliveHumans: " + stillLiving);
+
+            console.error("Score: " + totalScore + " Humans: " + stillLiving)
         }
 
         return totalScore;
@@ -410,7 +414,8 @@ class Player extends Person {
             }
         }
 
-        cache[cacheKey] = [bestLocation, bestNumSteps, zombieSteps];
+        cache.set(cacheKey, [bestLocation, bestNumSteps, zombieSteps]);
+//        cache[cacheKey] = [bestLocation, bestNumSteps, zombieSteps];
 
         return {
             'bestLocation': bestLocation,
@@ -554,31 +559,38 @@ class Tile {
     topLeft = new Coordinate(0, 0);
     center = new Coordinate(0, 0);
     bottomRight = new Coordinate(0, 0);
-    resolution = 1000;
-    tiles = [];
+    resolution = MaxResolution;
+    expanded = false;
     bestScore = -9999999999;
-    bestScores = Array(MaxSavedScores).fill(new Tile(0, 0, 1000), 0);
+    bestTiles = [];
 
     constructor(x, y, resolution) {
         this.topLeft.x = x;
         this.topLeft.y = y;
-        this.center.x = x + resolution / 2;
-        this.center.y = y + resolution / 2;
+        this.center.x = Math.floor(x + resolution / 2);
+        this.center.y = Math.floor(y + resolution / 2);
         this.bottomRight.x = x + resolution;
         this.bottomRight.y = y + resolution;
         this.resolution = resolution;
     }
 
-    expand() {
-        if (!isLowestResolution()) {
-            var newResolution = this.resolution / 10;
+    expand(newResolution) {
+        for (var i = 0; i < MaxSavedScores; i++) {
+            this.bestTiles.push(new Tile(0, 0, MaxResolution));
+        }
+
+        if (!this.expanded && !this.isLowestResolution()) {
             for (var newX = this.topLeft.x; newX < this.bottomRight.x; newX += newResolution) {
                 for (var newY = this.topLeft.y; newY < this.bottomRight.y; newY += newResolution) {
-                    var newTile = new Tile(newX, newY, newResolution);
-                    this.addScore(newTile);
+                    if ((new Coordinate(newX, newY)).inBounds()) {
+                        var newTile = new Tile(newX, newY, newResolution);
+                        this.addScore(newTile);
+                    }
                 }
             }
         }
+
+        this.expanded = true;
     }
 
     isLowestResolution() {
@@ -590,9 +602,9 @@ class Tile {
         for (var index = 0; index < MaxSavedScores; index++) {
             if (index < MaxSavedScores) {
                 var score = newTile.findScore();
-                if (score > thisScore) {
-                    this.bestScores.splice(index, 0, newTile);
-                    this.bestScores.splice(MaxSavedScores, 1);
+                if (score > this.bestTiles[MaxSavedScores - 1].findScore()) {
+                    this.bestTiles.splice(index, 0, newTile);
+                    this.bestTiles.splice(MaxSavedScores, 1);
                     return true;
                 }
             }
@@ -602,27 +614,35 @@ class Tile {
     findScore() {
         var key = this.center.x * 10000 + this.center.y;
 
-        if (!pointScores.has(key)) {
+        if (!(pointScores.has(key))) {
             var score = Player.simulate(player, this.center);
-            pointScores[key] = score;
+            if (this.isLowestResolution()) {
+                console.error("Storing score for " + key + " " + score);
+            }
+            pointScores.set(key, score);
         }
 
         return pointScores.get(key);
     }
 
     getBestScore() {
-        if (isLowestResolution()) {
-            return this.bestScore;
+        if (this.isLowestResolution()) {
+            return this;
         }
 
-        // For each best score, expand
+        if (!this.expanded) {
+            this.expand(this.resolution / ResolutionFactor);
+        }
+        
+        if (this.bestTiles[0] instanceof Tile) {
+            return this.bestTiles[0].getBestScore();
+        }
 
-        this.tiles.forEach(function (tile) {
-            var thisScore = tile.getBestScore();
-            if (thisScore > this.bestScore) {
-                this.bestScore = thisScore;
-            }
-        });
+        return this;
+    }
+
+    toString() {
+        return "Tile({" + this.center + "} {" + this.resolution + "})";
     }
 }
 
@@ -630,6 +650,7 @@ class Tile {
 while (true) {
     cache = new Map();
     pointScores = new Map();
+    var board = new Tile(0, 0, 16000);
 
     var inputs = readline().split(' ');
     const x = parseInt(inputs[0]);
@@ -667,6 +688,10 @@ while (true) {
 
     //    player.outputTurnAngle();
     //    player.outputTurnTarget();
-    player.outputTurn();
+    //    player.outputTurn();
     //    player.takeTurn();
+
+    board.expand(MaxResolution);
+    var bestTile = board.getBestScore();
+    console.log(bestTile.center + ' Target: ' + bestTile.center);
 }
