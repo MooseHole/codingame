@@ -548,25 +548,34 @@ class Player extends Person {
 
 var pointScores = new Map();
 
+var player = new Player(-1, 0, 0);
+
 class Tile {
+    topLeft = new Coordinate(0, 0);
     center = new Coordinate(0, 0);
+    bottomRight = new Coordinate(0, 0);
     resolution = 1000;
     tiles = [];
     bestScore = -9999999999;
-    bestScores = Array(MaxSavedScores).fill(-9999999999, 0);
+    bestScores = Array(MaxSavedScores).fill(new Tile(0, 0, 1000), 0);
 
     constructor(x, y, resolution) {
-        this.center.x = x;
-        this.center.y = y;
+        this.topLeft.x = x;
+        this.topLeft.y = y;
+        this.center.x = x + resolution / 2;
+        this.center.y = y + resolution / 2;
+        this.bottomRight.x = x + resolution;
+        this.bottomRight.y = y + resolution;
         this.resolution = resolution;
     }
 
     expand() {
         if (!isLowestResolution()) {
             var newResolution = this.resolution / 10;
-            for (var newX = this.center.x - resolution / 2; newX < this.center.x + resolution / 2; newX += newResolution) {
-                for (var newY = this.center.y - resolution / 2; newY < this.center.y + resolution / 2; newY += newResolution) {
-                    this.tiles.push(new Tile(newX, newY, newResolution));
+            for (var newX = this.topLeft.x; newX < this.bottomRight.x; newX += newResolution) {
+                for (var newY = this.topLeft.y; newY < this.bottomRight.y; newY += newResolution) {
+                    var newTile = new Tile(newX, newY, newResolution);
+                    this.addScore(newTile);
                 }
             }
         }
@@ -576,13 +585,15 @@ class Tile {
         return this.resolution == 1;
     }
 
-    addScore(score) {
+    addScore(newTile) {
         var index = 0;
         for (var index = 0; index < MaxSavedScores; index++) {
             if (index < MaxSavedScores) {
+                var score = newTile.findScore();
                 if (score > thisScore) {
-                    this.bestScores.splice(index, 0, score);
+                    this.bestScores.splice(index, 0, newTile);
                     this.bestScores.splice(MaxSavedScores, 1);
+                    return true;
                 }
             }
         }
@@ -591,13 +602,12 @@ class Tile {
     findScore() {
         var key = this.center.x * 10000 + this.center.y;
 
-        if (pointScores.has(key)) {
-            return pointScores.get(key);
+        if (!pointScores.has(key)) {
+            var score = Player.simulate(player, this.center);
+            pointScores[key] = score;
         }
 
-        // TODO: Find score for this tile
-        var score = this.center.x + this.center.y;
-        pointScores[key] = score;        
+        return pointScores.get(key);
     }
 
     getBestScore() {
@@ -615,8 +625,6 @@ class Tile {
         });
     }
 }
-
-var player = new Player(-1, 0, 0);
 
 // game loop
 while (true) {
