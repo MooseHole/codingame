@@ -8,7 +8,7 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 21; // ideal is max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 8; // ideal is max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
