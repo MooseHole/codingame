@@ -7,12 +7,15 @@ const PlayerKillRange = 2000;
 const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
-const TurnsToSimulate = 41; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+
+const TurnsToSimulate = 21; // ideal is max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
-const ShowDebug = true;
+
+const ShowDebug = false;
+//const inCodingame = true;
 
 class Coordinate {
     constructor(x, y) {
@@ -251,10 +254,6 @@ class Player extends Person {
             }
         });
 
-        if (aliveHumans == 0) {
-//            return -9000000;
-        }
-
         return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) + aliveHumans * 1000;
     }
 
@@ -288,9 +287,7 @@ class Player extends Person {
                 stillLiving += humanId + ", ";
             });
 
-            if (pointScores.size > 200) {
-                console.error("Score: " + totalScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation + " pointScores: " + pointScores.size);
-            }
+            console.error("Score: " + totalScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation);
         }
 
         return totalScore;
@@ -331,30 +328,24 @@ class Player extends Person {
     }
 
     static updateTarget(player) {
-        console.error("updateTarget A");
         if (this.dead) {
             return;
         }
 
-        console.error("updateTarget B");
         var bestScore = -999999999;
         player.myZombies.forEach(function (zombie) {
             if (zombie.dead) {
                 return;
             }
-            console.error("updateTarget C");
 
             var playerClone = player.clone();
             var thisScore = Player.simulateAssault(playerClone, zombie.id);
-            console.error("updateTarget D", bestScore, thisScore);
             if (thisScore > bestScore) {
                 bestScore = thisScore;
-                console.error("bestScore: " + bestScore + " zombie: " + zombie.id);
                 player.bestTargetId = zombie.id;
             }
 
         }.bind(player));
-        console.error("updateTarget E");
 
         return bestScore;
     }
@@ -468,8 +459,6 @@ class Player extends Person {
     outputTurnTarget() {
         var myTarget = zombies.get(this.bestTargetId);
         if (myTarget instanceof Zombie) {
-//            var myTargetLocation = this.getTargetLocation(myTarget.id)
-//            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
             console.log(myTarget.location + ' Gonna kill ' + this.bestTargetId);
         } else {
             console.log(this.location + ' No Target ' + this.bestTargetId);
@@ -577,11 +566,12 @@ class Tile {
         this.bottomRight.x = x + resolution;
         this.bottomRight.y = y + resolution;
         this.resolution = resolution;
+        this.bestScore = -9999999999;
     }
 
     expand(newResolution) {
         for (var i = 0; i < MaxSavedScores; i++) {
-            this.bestTiles.push(new Tile(0, 0, MaxResolution));
+            this.bestTiles.push(new Tile(0, 0, newResolution));
         }
 
         if (!this.expanded && !this.isLowestResolution()) {
@@ -629,14 +619,13 @@ class Tile {
 
     getBestTile() {
         if (this.isLowestResolution()) {
-            console.error("best tile:", this.center, this.findScore());
             return this;
         }
 
         if (!this.expanded) {
             this.expand(this.resolution / ResolutionFactor);
         }
-        
+
         if (this.bestTiles[0] instanceof Tile) {
             return this.bestTiles[0].getBestTile();
         }
@@ -649,60 +638,74 @@ class Tile {
     }
 }
 
-// game loop
-while (true) {
-    cache = new Map();
-    pointScores = new Map();
+var lineNumber = 0;
+function getline() {
+    //    if (inCodingame) {
+    return readline();
+    //    }
+    /*
+        // Test case from ending of Split-second reflex
+        switch (lineNumber) {
+            case 0: return "12131 3789"; // Player location
+            case 1: return "1"; // Human count
+            case 2: return "1 14000 4500"; // Human 1
+            case 3: return "1"; // Zombie count
+            case 4: return "0 4992 4358 4992 4358"; // Zombie 0
+        }
+    */
+}
 
-    var inputs = readline().split(' ');
-    const x = parseInt(inputs[0]);
-    const y = parseInt(inputs[1]);
+function go() {
+    // game loop
+    while (true) {
+        cache = new Map();
+        pointScores = new Map();
 
-    player.location.x = x;
-    player.location.y = y;
+        var inputs = getline().split(' ');
+        const x = parseInt(inputs[0]);
+        const y = parseInt(inputs[1]);
 
-    const humanCount = parseInt(readline());
-    humans = new Map();
-    for (let i = 0; i < humanCount; i++) {
-        var inputs = readline().split(' ');
-        const humanId = parseInt(inputs[0]);
-        const humanX = parseInt(inputs[1]);
-        const humanY = parseInt(inputs[2]);
-        humans.set(humanId, new Person(humanId, humanX, humanY));
-    }
-    const zombieCount = parseInt(readline());
-    zombies = new Map();
-    for (let i = 0; i < zombieCount; i++) {
-        var inputs = readline().split(' ');
+        player.location.x = x;
+        player.location.y = y;
 
-        const zombieId = parseInt(inputs[0]);
-        const zombieX = parseInt(inputs[1]);
-        const zombieY = parseInt(inputs[2]);
-        const zombieXNext = parseInt(inputs[3]);
-        const zombieYNext = parseInt(inputs[4]);
-        var thisZombie = new Zombie(zombieId, zombieX, zombieY);
-        thisZombie.myHumans = humans;
-        zombies.set(zombieId, thisZombie);
-    }
+        const humanCount = parseInt(getline());
+        humans = new Map();
+        for (let i = 0; i < humanCount; i++) {
+            var inputs = getline().split(' ');
+            const humanId = parseInt(inputs[0]);
+            const humanX = parseInt(inputs[1]);
+            const humanY = parseInt(inputs[2]);
+            humans.set(humanId, new Person(humanId, humanX, humanY));
+        }
+        const zombieCount = parseInt(getline());
+        zombies = new Map();
+        for (let i = 0; i < zombieCount; i++) {
+            var inputs = getline().split(' ');
 
-    player.myZombies = zombies;
-    player.myHumans = humans;
-    humans.set(player.id, player);
+            const zombieId = parseInt(inputs[0]);
+            const zombieX = parseInt(inputs[1]);
+            const zombieY = parseInt(inputs[2]);
+            const zombieXNext = parseInt(inputs[3]);
+            const zombieYNext = parseInt(inputs[4]);
+            var thisZombie = new Zombie(zombieId, zombieX, zombieY);
+            thisZombie.myHumans = humans;
+            zombies.set(zombieId, thisZombie);
+        }
 
-    //    player.outputTurnAngle();
-    //    player.outputTurnTarget();
-    //    player.outputTurn();
-    //    player.takeTurn();
+        player.myZombies = zombies;
+        player.myHumans = humans;
+        humans.set(player.id, player);
 
+        //    player.outputTurnAngle();
+        //    player.outputTurnTarget();
+        //    player.outputTurn();
+        //    player.takeTurn();
 
-    if (zombies.size < 2) {
-        console.error("zombies: " + zombies.size + " player.myZombies: " + player.myZombies.size);
-        Player.updateTarget(player);
-        player.outputTurnTarget();
-    } else {        
         var board = new Tile(0, 0, 16000);
         board.expand(MaxResolution);
         var bestTile = board.getBestTile();
         console.log(bestTile.center + ' Target: ' + bestTile.center);
     }
 }
+
+go();
