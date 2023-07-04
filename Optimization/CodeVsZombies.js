@@ -8,14 +8,13 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 8; // ideal is max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 8; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
 
 const ShowDebug = false;
-//const inCodingame = true;
 
 class Coordinate {
     constructor(x, y) {
@@ -254,12 +253,12 @@ class Player extends Person {
             }
         });
 
-        return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) + aliveHumans * 1000;
+        return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) ;// + aliveHumans * 1000;
     }
 
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
-        var totalScore = 0;
+        var maxScore = -99999999;
 
         for (var i = 0; i < TurnsToSimulate; i++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
@@ -271,7 +270,7 @@ class Player extends Person {
                 zombie.eat();
             });
 
-            totalScore += Player.findScoreThisTurn(simulatedPlayer, killCount);
+            maxScore = Math.max(Player.findScoreThisTurn(simulatedPlayer, killCount), maxScore);
         }
 
         var aliveHumans = [];
@@ -287,10 +286,10 @@ class Player extends Person {
                 stillLiving += humanId + ", ";
             });
 
-            console.error("Score: " + totalScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation);
+            console.error("Score: " + maxScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation);
         }
 
-        return totalScore;
+        return maxScore;
     }
 
     static simulateAssault(player, targetId) {
@@ -459,6 +458,8 @@ class Player extends Person {
     outputTurnTarget() {
         var myTarget = zombies.get(this.bestTargetId);
         if (myTarget instanceof Zombie) {
+//            var myTargetLocation = this.getTargetLocation(myTarget.id)
+//            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
             console.log(myTarget.location + ' Gonna kill ' + this.bestTargetId);
         } else {
             console.log(this.location + ' No Target ' + this.bestTargetId);
@@ -555,7 +556,6 @@ class Tile {
     bottomRight = new Coordinate(0, 0);
     resolution = MaxResolution;
     expanded = false;
-    bestScore = -9999999999;
     bestTiles = [];
 
     constructor(x, y, resolution) {
@@ -566,12 +566,11 @@ class Tile {
         this.bottomRight.x = x + resolution;
         this.bottomRight.y = y + resolution;
         this.resolution = resolution;
-        this.bestScore = -9999999999;
     }
 
     expand(newResolution) {
         for (var i = 0; i < MaxSavedScores; i++) {
-            this.bestTiles.push(new Tile(0, 0, newResolution));
+            this.bestTiles.push(new Tile(0, 0, MaxResolution));
         }
 
         if (!this.expanded && !this.isLowestResolution()) {
@@ -593,15 +592,12 @@ class Tile {
     }
 
     addScore(newTile) {
-        var index = 0;
+        var score = newTile.findScore();
         for (var index = 0; index < MaxSavedScores; index++) {
-            if (index < MaxSavedScores) {
-                var score = newTile.findScore();
-                if (score > this.bestTiles[MaxSavedScores - 1].findScore()) {
-                    this.bestTiles.splice(index, 0, newTile);
-                    this.bestTiles.splice(MaxSavedScores, 1);
-                    return true;
-                }
+            if (score > this.bestTiles[index].findScore()) {
+                this.bestTiles.splice(index, 0, newTile);
+                this.bestTiles.splice(MaxSavedScores, 1);
+                return true;
             }
         }
     }
@@ -625,7 +621,7 @@ class Tile {
         if (!this.expanded) {
             this.expand(this.resolution / ResolutionFactor);
         }
-
+        
         if (this.bestTiles[0] instanceof Tile) {
             return this.bestTiles[0].getBestTile();
         }
@@ -638,74 +634,54 @@ class Tile {
     }
 }
 
-var lineNumber = 0;
-function getline() {
-    //    if (inCodingame) {
-    return readline();
-    //    }
-    /*
-        // Test case from ending of Split-second reflex
-        switch (lineNumber) {
-            case 0: return "12131 3789"; // Player location
-            case 1: return "1"; // Human count
-            case 2: return "1 14000 4500"; // Human 1
-            case 3: return "1"; // Zombie count
-            case 4: return "0 4992 4358 4992 4358"; // Zombie 0
-        }
-    */
-}
+// game loop
+while (true) {
+    cache = new Map();
+    pointScores = new Map();
 
-function go() {
-    // game loop
-    while (true) {
-        cache = new Map();
-        pointScores = new Map();
+    var inputs = readline().split(' ');
+    const x = parseInt(inputs[0]);
+    const y = parseInt(inputs[1]);
 
-        var inputs = getline().split(' ');
-        const x = parseInt(inputs[0]);
-        const y = parseInt(inputs[1]);
+    player.location.x = x;
+    player.location.y = y;
 
-        player.location.x = x;
-        player.location.y = y;
-
-        const humanCount = parseInt(getline());
-        humans = new Map();
-        for (let i = 0; i < humanCount; i++) {
-            var inputs = getline().split(' ');
-            const humanId = parseInt(inputs[0]);
-            const humanX = parseInt(inputs[1]);
-            const humanY = parseInt(inputs[2]);
-            humans.set(humanId, new Person(humanId, humanX, humanY));
-        }
-        const zombieCount = parseInt(getline());
-        zombies = new Map();
-        for (let i = 0; i < zombieCount; i++) {
-            var inputs = getline().split(' ');
-
-            const zombieId = parseInt(inputs[0]);
-            const zombieX = parseInt(inputs[1]);
-            const zombieY = parseInt(inputs[2]);
-            const zombieXNext = parseInt(inputs[3]);
-            const zombieYNext = parseInt(inputs[4]);
-            var thisZombie = new Zombie(zombieId, zombieX, zombieY);
-            thisZombie.myHumans = humans;
-            zombies.set(zombieId, thisZombie);
-        }
-
-        player.myZombies = zombies;
-        player.myHumans = humans;
-        humans.set(player.id, player);
-
-        //    player.outputTurnAngle();
-        //    player.outputTurnTarget();
-        //    player.outputTurn();
-        //    player.takeTurn();
-
-        var board = new Tile(0, 0, 16000);
-        board.expand(MaxResolution);
-        var bestTile = board.getBestTile();
-        console.log(bestTile.center + ' Target: ' + bestTile.center);
+    const humanCount = parseInt(readline());
+    humans = new Map();
+    for (let i = 0; i < humanCount; i++) {
+        var inputs = readline().split(' ');
+        const humanId = parseInt(inputs[0]);
+        const humanX = parseInt(inputs[1]);
+        const humanY = parseInt(inputs[2]);
+        humans.set(humanId, new Person(humanId, humanX, humanY));
     }
-}
+    const zombieCount = parseInt(readline());
+    zombies = new Map();
+    for (let i = 0; i < zombieCount; i++) {
+        var inputs = readline().split(' ');
 
-go();
+        const zombieId = parseInt(inputs[0]);
+        const zombieX = parseInt(inputs[1]);
+        const zombieY = parseInt(inputs[2]);
+        const zombieXNext = parseInt(inputs[3]);
+        const zombieYNext = parseInt(inputs[4]);
+        var thisZombie = new Zombie(zombieId, zombieX, zombieY);
+        thisZombie.myHumans = humans;
+        zombies.set(zombieId, thisZombie);
+    }
+
+    player.myZombies = zombies;
+    player.myHumans = humans;
+    humans.set(player.id, player);
+
+    //    player.outputTurnAngle();
+    //    player.outputTurnTarget();
+    //    player.outputTurn();
+    //    player.takeTurn();
+
+
+    var board = new Tile(0, 0, 16000);
+    board.expand(MaxResolution);
+    var bestTile = board.getBestTile();
+    console.log(bestTile.center + ' ' + bestTile.findScore());
+}
