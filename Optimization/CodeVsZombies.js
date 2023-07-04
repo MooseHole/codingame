@@ -622,8 +622,16 @@ class Tile {
             this.expand(this.resolution / ResolutionFactor);
         }
         
-        if (this.bestTiles[0] instanceof Tile) {
-            return this.bestTiles[0].getBestTile();
+        var bestScore = -999999999;
+        var bestTile = null;
+        for (var index = 0; index < MaxSavedScores; index++) {
+            var thisScore = this.bestTiles[index].findScore();
+            if (thisScore > bestScore) {
+                bestScore = thisScore;
+                bestTile = this.bestTiles[index];
+            }
+
+            return bestTile.getBestTile();
         }
 
         return this;
