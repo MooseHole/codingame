@@ -7,6 +7,7 @@ const PlayerKillRange = 2000;
 const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
+const LowNumber = -99999999;
 
 const TurnsToSimulate = 30; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
@@ -129,8 +130,6 @@ class Zombie extends Person {
 
 var zombies = new Map();
 
-var cache = new Map();
-
 class Player extends Person {
     targetId = -1;
     bestHeading = 0;
@@ -189,33 +188,16 @@ class Player extends Person {
         return clonePlayer;
     }
 
-    static fibbonacci(n) {
-        if (n <= 0) {
-            return 0;
-        }
-
-        if (n == 1) {
-            return 1;
-        }
-
-        if (n == 2) {
-            return 2;
-        }
-
-        return this.fibbonacci(n - 1) + this.fibbonacci(n - 2);
-    }
-
     static findScoreThisTurn(survivorCount, killCount) {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
-
-        return Math.pow(survivorCount, 2) * 10 * Player.fibbonacci(killCount) ;// + survivorCount * 1000;
+        return Math.pow(survivorCount, 2) * 10 * fibonnacci(killCount);
     }
 
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
-        var maxScore = -99999999;
+        var maxScore = LowNumber;
 
         var survivorCount = 0;
         for (var i = 0; i < TurnsToSimulate; i++) {
@@ -236,7 +218,7 @@ class Player extends Person {
             });
 
             if (survivorCount == 0) {
-                return -999999999;
+                return LowNumber;
             }
     
             maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
@@ -354,7 +336,7 @@ class Tile {
             this.expand(this.resolution / ResolutionFactor);
         }
         
-        var bestScore = -999999999;
+        var bestScore = LowNumber;
         var bestTile = null;
         for (var index = 0; index < this.bestTiles.length; index++) {
             var thisScore = this.bestTiles[index].findScore();
@@ -378,9 +360,26 @@ class Tile {
     }
 }
 
+
+var fibonnacciCache = new Map();
+
+function fibonnacci(n) {
+    if (!fibonnacciCache.has(n)) {
+        fibonnacciCache.set(n, fibonnacci(n - 1) + fibonnacci(n - 2));
+    }
+
+    return fibonnacciCache.get(n);
+}
+
+fibonnacciCache.set(0, 0);
+fibonnacciCache.set(1, 1);
+fibonnacciCache.set(2, 2);
+for (var i = 3; i < 30; i++) {
+    fibonnacci(i));
+}
+
 // game loop
 while (true) {
-//    cache = new Map();
     pointScores = new Map();
     humans = new Map();
     zombies = new Map();
