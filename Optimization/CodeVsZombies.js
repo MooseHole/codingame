@@ -8,7 +8,7 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 30; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 20; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
@@ -271,11 +271,11 @@ class Player extends Person {
                 }
             });
 
+            if (aliveHumans == 0) {
+                return -999999999;
+            }
+    
             maxScore = Math.max(Player.findScoreThisTurn(aliveHumans, killCount), maxScore);
-        }
-
-        if (aliveHumans == 0) {
-            return -999999999;
         }
 
         if (ShowDebug) {
