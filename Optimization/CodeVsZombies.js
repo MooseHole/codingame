@@ -8,7 +8,7 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 8; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 11; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
@@ -279,6 +279,10 @@ class Player extends Person {
                 aliveHumans.push(human.id);
             }
         });
+
+        if (aliveHumans.length == 0) {
+            return -999999999;
+        }
 
         if (ShowDebug) {
             var stillLiving = "";
@@ -569,10 +573,6 @@ class Tile {
     }
 
     expand(newResolution) {
-        for (var i = 0; i < MaxSavedScores; i++) {
-            this.bestTiles.push(new Tile(0, 0, MaxResolution));
-        }
-
         if (!this.expanded && !this.isLowestResolution()) {
             for (var newX = this.topLeft.x; newX < this.bottomRight.x; newX += newResolution) {
                 for (var newY = this.topLeft.y; newY < this.bottomRight.y; newY += newResolution) {
@@ -588,12 +588,17 @@ class Tile {
     }
 
     isLowestResolution() {
-        return this.resolution == 1;
+        return this.resolution == MinResolution;
     }
 
     addScore(newTile) {
         var score = newTile.findScore();
         for (var index = 0; index < MaxSavedScores; index++) {
+            if (this.bestTiles.length < index + 1) {
+                this.bestTiles.push(newTile);
+                return true;
+            }
+
             if (score > this.bestTiles[index].findScore()) {
                 this.bestTiles.splice(index, 0, newTile);
                 this.bestTiles.splice(MaxSavedScores, 1);
@@ -613,6 +618,14 @@ class Tile {
         return pointScores.get(key);
     }
 
+    printBestTiles() {
+        for (var index = 0; index < this.bestTiles.length; index++) {
+            if (!this.isLowestResolution()) {
+                this.bestTiles[index].printBestTiles();
+            }
+        }
+    }
+
     getBestTile() {
         if (this.isLowestResolution()) {
             return this;
@@ -624,7 +637,7 @@ class Tile {
         
         var bestScore = -999999999;
         var bestTile = null;
-        for (var index = 0; index < MaxSavedScores; index++) {
+        for (var index = 0; index < this.bestTiles.length; index++) {
             var thisScore = this.bestTiles[index].findScore();
             if (thisScore > bestScore) {
                 bestScore = thisScore;
@@ -686,7 +699,6 @@ while (true) {
     //    player.outputTurnTarget();
     //    player.outputTurn();
     //    player.takeTurn();
-
 
     var board = new Tile(0, 0, 16000);
     board.expand(MaxResolution);
