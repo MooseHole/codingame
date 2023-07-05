@@ -8,7 +8,7 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 20; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 30; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
@@ -30,10 +30,6 @@ class Coordinate {
         return Math.atan2(target.y - this.y, target.x - this.x);
     }
 
-    degreeToRadians(degree) {
-        return degree * Math.PI / 180;
-    }
-
     moveToTarget(target, speed) {
         if (Math.ceil(this.distanceTo(target) <= speed)) {
             this.x = target.x;
@@ -43,21 +39,6 @@ class Coordinate {
             this.x += Math.floor(Math.cos(direction) * speed);
             this.y += Math.floor(Math.sin(direction) * speed);
         }
-    }
-
-    moveAngle(degree, speed) {
-        var direction = this.degreeToRadians(degree);
-        this.x += Math.floor(Math.cos(direction) * speed);
-        this.y += Math.floor(Math.sin(direction) * speed);
-    }
-
-    // Returns the midpoint between this coordinate and other coordinate
-    midpointTo(other) {
-        return new Coordinate(Math.floor((this.x + other.x) / 2), Math.floor((this.y + other.y) / 2));
-    }
-
-    inBounds() {
-        return this.x >= 0 && this.x <= XBoundary && this.y >= 0 && this.y <= YBoundary;
     }
 
     toString() {
@@ -192,7 +173,7 @@ class Player extends Person {
             var cloneHuman = new Person(human.id, human.location.x, human.location.y);
             cloneHuman.dead = human.dead;
             cloneHumans.set(cloneHuman.id, cloneHuman);
-        }.bind(this));
+        });
 
         var cloneZombies = new Map(zombies);
         zombies.forEach(function (zombie) {
@@ -200,29 +181,12 @@ class Player extends Person {
             cloneZombie.dead = zombie.dead;
             cloneZombie.myHumans = cloneHumans;
             cloneZombies.set(zombie.id, cloneZombie);
-        }.bind(this));
+        });
 
         clonePlayer.myZombies = cloneZombies;
         clonePlayer.myHumans = cloneHumans;
 
         return clonePlayer;
-    }
-
-    static findClosestZombie(player) {
-        var minDistance = XBoundary + YBoundary;
-        var closestZombie = null;
-        player.myZombies.forEach(function (zombie) {
-            if (zombie.dead) {
-                return;
-            }
-            var distance = player.location.distanceTo(zombie.location);
-            if (distance < minDistance) {
-                minDistance = distance;
-                closestZombie = zombie;
-            }
-        }.bind(player));
-
-        return closestZombie;
     }
 
     static fibbonacci(n) {
@@ -241,19 +205,19 @@ class Player extends Person {
         return this.fibbonacci(n - 1) + this.fibbonacci(n - 2);
     }
 
-    static findScoreThisTurn(aliveHumans, killCount) {
+    static findScoreThisTurn(survivorCount, killCount) {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
 
-        return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) ;// + aliveHumans * 1000;
+        return Math.pow(survivorCount, 2) * 10 * Player.fibbonacci(killCount) ;// + survivorCount * 1000;
     }
 
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
         var maxScore = -99999999;
 
-        var aliveHumans = 0;
+        var survivorCount = 0;
         for (var i = 0; i < TurnsToSimulate; i++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
                 zombie.step();
@@ -264,180 +228,25 @@ class Player extends Person {
                 zombie.eat();
             });
 
-            aliveHumans = 0;
+            survivorCount = 0;
             simulatedPlayer.myHumans.forEach(function (human) {
                 if (!human.dead && human.id != simulatedPlayer.id) {
-                    aliveHumans++;
+                    survivorCount++;
                 }
             });
 
-            if (aliveHumans == 0) {
+            if (survivorCount == 0) {
                 return -999999999;
             }
     
-            maxScore = Math.max(Player.findScoreThisTurn(aliveHumans, killCount), maxScore);
-        }
-
-        if (ShowDebug) {
-            var stillLiving = "";
-            aliveHumans.forEach(function (humanId) {
-                stillLiving += humanId + ", ";
-            });
-
-            console.error("Score: " + maxScore + " Humans: " + stillLiving + " Evaulated: " + targetLocation);
+            maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
         }
 
         return maxScore;
     }
 
-    static simulateAssault(player, targetId) {
-        var totalScore = 0;
-        player.targetId = targetId;
-
-        // If the zombie is closer to the target than the player, it's a bad idea to move towards it.
-        var intercept = player.getIntercept(targetId);
-        if (intercept.playerSteps > intercept.zombieSteps) {
-            totalScore += TurnsToSimulate * -1000;
-        }
-
-        totalScore += intercept.playerSteps * -1000;
-
-        totalScore += Player.simulate(player, intercept.bestLocation);
-
-        return totalScore;
-    }
-
-    static simulateMovement(player, heading) {
-
-        var killCount = 0;
-        while (killCount < 1 && player.location.inBounds()) {
-            player.myZombies.forEach(function (zombie) {
-                zombie.step();
-            });
-            player.move(heading);
-            killCount = player.kill();
-            player.myZombies.forEach(function (zombie) {
-                zombie.eat();
-            });
-        }
-
-        var aliveHumans = 0;
-        simulatedPlayer.myHumans.forEach(function (human) {
-            if (!human.dead && human.id != simulatedPlayer.id) {
-                aliveHumans++;
-            }
-        });
-
-        return Player.findScoreThisTurn(aliveHumans, killCount);
-    }
-
-    static updateTarget(player) {
-        if (this.dead) {
-            return;
-        }
-
-        var bestScore = -999999999;
-        player.myZombies.forEach(function (zombie) {
-            if (zombie.dead) {
-                return;
-            }
-
-            var playerClone = player.clone();
-            var thisScore = Player.simulateAssault(playerClone, zombie.id);
-            if (thisScore > bestScore) {
-                bestScore = thisScore;
-                player.bestTargetId = zombie.id;
-            }
-
-        }.bind(player));
-
-        return bestScore;
-    }
-
-    static updateAngle(player) {
-        var bestScore = 0;
-        for (var heading = 0; heading < 360; heading += HeadingInterval) {
-            var playerClone = player.clone();
-            var thisScore = Player.simulateMovement(playerClone, heading);
-            if (thisScore > bestScore) {
-                bestScore = thisScore;
-                player.bestHeading = heading;
-            }
-        }
-        return bestScore;
-    }
-
-    getIntercept(zombieId) {
-        var zombie = this.myZombies.get(zombieId);
-        var zombiesTarget = Zombie.findClosestHuman(zombie);
-
-        var cacheKey = "getIntercept" + this.location + "," + zombie.location;
-        if (zombiesTarget instanceof Person) {
-            cacheKey += "," + zombiesTarget.id;
-        }
-
-        if (cache.has(cacheKey)) {
-            return cache.get(cacheKey);
-        }
-
-        var bestLocation = new Coordinate(this.location.x, this.location.y);
-        var bestNumSteps = 10000;
-        var zombieSteps = 10000;
-
-        var centerOfZombies = Player.findCentroid(this.myZombies);
-
-        // Find intercept point between the zombie and the target.
-        if (zombiesTarget instanceof Person) {
-            var minDistanceToCenter = 100000;
-            var distanceToCenter = 10000;
-            var distanceToHuman = zombie.location.distanceTo(zombiesTarget.location);
-            bestNumSteps = 0;
-            zombieSteps = Math.ceil(distanceToHuman / zombie.speed) + 1;
-            for (var zombieDistance = 0; zombieDistance <= distanceToHuman; zombieDistance += zombie.speed) {
-                // For each location the zombie will be at
-                var zombieLocation = new Coordinate(zombie.location.x, zombie.location.y);
-                zombieLocation.moveToTarget(zombiesTarget.location, zombieDistance);
-
-                // Find the number of steps the player will need to take to get to that location.
-                var distanceToZombie = this.location.distanceTo(zombieLocation);
-                var numSteps = Math.ceil((distanceToZombie - PlayerKillRange) / player.speed) + 1;
-
-                // Find the distance from the center of the zombies to the zombie's location.
-                distanceToCenter = centerOfZombies.distanceTo(zombieLocation);
-
-                if (distanceToCenter < minDistanceToCenter) {
-                    minDistanceToCenter = distanceToCenter;
-                    bestLocation.x = zombieLocation.x;
-                    bestLocation.y = zombieLocation.y;
-                    bestNumSteps = numSteps;
-                }
-            }
-        }
-
-        cache.set(cacheKey, [bestLocation, bestNumSteps, zombieSteps]);
-
-        return {
-            'bestLocation': bestLocation,
-            'playerSteps': bestNumSteps,
-            'zombieSteps': zombieSteps
-        }
-    }
-
-    getTargetLocation(zombieId) {
-        var intercept = this.getIntercept(zombieId);
-        return intercept.bestLocation;
-    }
-
-    step() {
-        this.goToLocation(this.getTargetLocation(this.targetId));
-    }
-
     goToLocation(location) {
         this.location.moveToTarget(location, this.speed);
-    }
-
-    move(degree) {
-        this.location.moveAngle(degree, this.speed);
     }
 
     kill() {
@@ -446,108 +255,19 @@ class Player extends Person {
         }
 
         var killCount = 0;
+        var myLocation = this.location;
         this.myZombies.forEach(function (zombie) {
             if (zombie.dead) {
                 return;
             }
-            var distance = this.location.distanceTo(zombie.location);
+            var distance = myLocation.distanceTo(zombie.location);
             if (distance <= PlayerKillRange) {
                 zombie.dead = true;
                 killCount++;
             }
-        }.bind(this));
+        });
 
         return killCount;
-    }
-
-    outputTurnTarget() {
-        var myTarget = zombies.get(this.bestTargetId);
-        if (myTarget instanceof Zombie) {
-//            var myTargetLocation = this.getTargetLocation(myTarget.id)
-//            console.log(myTargetLocation + ' Gonna kill ' + this.bestTargetId);
-            console.log(myTarget.location + ' Gonna kill ' + this.bestTargetId);
-        } else {
-            console.log(this.location + ' No Target ' + this.bestTargetId);
-        }
-    }
-
-    outputTurnAngle() {
-        var nextLocation = new Coordinate(this.location.x, this.location.y);
-        nextLocation.moveAngle(this.bestHeading, this.speed);
-        console.log(nextLocation + ' My heading is ' + this.bestHeading);
-    }
-
-    outputTurn() {
-        var anglePlayer = this.clone();
-        var targetingPlayer = this.clone();
-        var angleScore = Player.updateAngle(anglePlayer);
-        var targetScore = Player.updateTarget(targetingPlayer);
-
-        if (angleScore > targetScore) {
-            anglePlayer.outputTurnAngle();
-        } else {
-            targetingPlayer.outputTurnTarget();
-        }
-    }
-
-    takeTurn(depth = 0, angleScore = 0, targetScore = 0) {
-        var anglePlayer = player.clone();
-        var targetingPlayer = player.clone();
-        var thisIterationAngleScore = Player.updateAngle(anglePlayer);
-        var thisIterationTargetScore = Player.updateTarget(targetingPlayer);
-
-        if (thisIterationAngleScore > thisIterationTargetScore) {
-            angleScore += thisIterationAngleScore;
-
-            if (depth > MaxDepth) {
-                return angleScore;
-            }
-
-            var anglePlayerAliveZombies = false;
-            anglePlayer.myZombies.forEach(function (zombie) {
-                if (anglePlayerAliveZombies) {
-                    return;
-                }
-
-                if (!zombie.dead) {
-                    anglePlayerAliveZombies = true;
-                }
-            });
-
-            if (anglePlayerAliveZombies) {
-                angleScore += anglePlayer.takeTurn(depth + 1, angleScore, targetScore);
-            }
-        } else {
-            targetScore += thisIterationTargetScore;
-
-            if (depth > MaxDepth) {
-                return targetScore;
-            }
-
-            var targetingPlayerAliveZombies = false;
-            targetingPlayer.myZombies.forEach(function (zombie) {
-                if (targetingPlayerAliveZombies) {
-                    return;
-                }
-
-                if (!zombie.dead) {
-                    targetingPlayerAliveZombies = true;
-                }
-            });
-
-            if (targetingPlayerAliveZombies) {
-                targetScore += targetingPlayer.takeTurn(depth + 1, angleScore, targetScore);
-            }
-        }
-
-        if (depth == 0) {
-            if (angleScore > targetScore) {
-                anglePlayer.outputTurnAngle();
-            } else {
-                targetingPlayer.outputTurnTarget();
-            }
-        }
-
     }
 }
 
@@ -650,6 +370,12 @@ class Tile {
     toString() {
         return "Tile({" + this.center + "} {" + this.resolution + "})";
     }
+
+    outputMainTile() {
+        this.expand(MaxResolution);
+        var bestTile = this.getBestTile();
+        console.log(bestTile.center + ' ' + bestTile.findScore());
+    }
 }
 
 // game loop
@@ -695,12 +421,5 @@ while (true) {
     player.myHumans = humans;
     humans.set(player.id, player);
 
-    //    player.outputTurnAngle();
-    //    player.outputTurnTarget();
-    //    player.outputTurn();
-    //    player.takeTurn();
-
-    board.expand(MaxResolution);
-    var bestTile = board.getBestTile();
-    console.log(bestTile.center + ' ' + bestTile.findScore());
+    board.outputMainTile();
 }
