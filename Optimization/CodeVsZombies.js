@@ -8,7 +8,7 @@ const ZombieSpeed = 400;
 const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 
-const TurnsToSimulate = 11; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 30; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
@@ -241,17 +241,10 @@ class Player extends Person {
         return this.fibbonacci(n - 1) + this.fibbonacci(n - 2);
     }
 
-    static findScoreThisTurn(player, killCount) {
+    static findScoreThisTurn(aliveHumans, killCount) {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
-
-        var aliveHumans = 0;
-        player.myHumans.forEach(function (human) {
-            if (!human.dead && human.id != player.id) {
-                aliveHumans++;
-            }
-        });
 
         return Math.pow(aliveHumans, 2) * 10 * Player.fibbonacci(killCount) ;// + aliveHumans * 1000;
     }
@@ -260,6 +253,7 @@ class Player extends Person {
         var simulatedPlayer = player.clone();
         var maxScore = -99999999;
 
+        var aliveHumans = 0;
         for (var i = 0; i < TurnsToSimulate; i++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
                 zombie.step();
@@ -270,17 +264,17 @@ class Player extends Person {
                 zombie.eat();
             });
 
-            maxScore = Math.max(Player.findScoreThisTurn(simulatedPlayer, killCount), maxScore);
+            aliveHumans = 0;
+            simulatedPlayer.myHumans.forEach(function (human) {
+                if (!human.dead && human.id != simulatedPlayer.id) {
+                    aliveHumans++;
+                }
+            });
+
+            maxScore = Math.max(Player.findScoreThisTurn(aliveHumans, killCount), maxScore);
         }
 
-        var aliveHumans = [];
-        simulatedPlayer.myHumans.forEach(function (human) {
-            if (!human.dead && human.id != simulatedPlayer.id) {
-                aliveHumans.push(human.id);
-            }
-        });
-
-        if (aliveHumans.length == 0) {
+        if (aliveHumans == 0) {
             return -999999999;
         }
 
@@ -327,7 +321,14 @@ class Player extends Person {
             });
         }
 
-        return Player.findScoreThisTurn(player, killCount);
+        var aliveHumans = 0;
+        simulatedPlayer.myHumans.forEach(function (human) {
+            if (!human.dead && human.id != simulatedPlayer.id) {
+                aliveHumans++;
+            }
+        });
+
+        return Player.findScoreThisTurn(aliveHumans, killCount);
     }
 
     static updateTarget(player) {
@@ -576,10 +577,8 @@ class Tile {
         if (!this.expanded && !this.isLowestResolution()) {
             for (var newX = this.topLeft.x; newX < this.bottomRight.x; newX += newResolution) {
                 for (var newY = this.topLeft.y; newY < this.bottomRight.y; newY += newResolution) {
-                    if ((new Coordinate(newX, newY)).inBounds()) {
-                        var newTile = new Tile(newX, newY, newResolution);
-                        this.addScore(newTile);
-                    }
+                    var newTile = new Tile(newX, newY, newResolution);
+                    this.addScore(newTile);
                 }
             }
         }
@@ -643,11 +642,9 @@ class Tile {
                 bestScore = thisScore;
                 bestTile = this.bestTiles[index];
             }
-
-            return bestTile.getBestTile();
         }
 
-        return this;
+        return bestTile.getBestTile();
     }
 
     toString() {
@@ -657,8 +654,13 @@ class Tile {
 
 // game loop
 while (true) {
-    cache = new Map();
+//    cache = new Map();
     pointScores = new Map();
+    humans = new Map();
+    zombies = new Map();
+    var board = new Tile(0, 0, XBoundary);
+    board.bottomRight.x = XBoundary;
+    board.bottomRight.y = YBoundary;
 
     var inputs = readline().split(' ');
     const x = parseInt(inputs[0]);
@@ -668,7 +670,6 @@ while (true) {
     player.location.y = y;
 
     const humanCount = parseInt(readline());
-    humans = new Map();
     for (let i = 0; i < humanCount; i++) {
         var inputs = readline().split(' ');
         const humanId = parseInt(inputs[0]);
@@ -677,7 +678,6 @@ while (true) {
         humans.set(humanId, new Person(humanId, humanX, humanY));
     }
     const zombieCount = parseInt(readline());
-    zombies = new Map();
     for (let i = 0; i < zombieCount; i++) {
         var inputs = readline().split(' ');
 
@@ -700,7 +700,6 @@ while (true) {
     //    player.outputTurn();
     //    player.takeTurn();
 
-    var board = new Tile(0, 0, 16000);
     board.expand(MaxResolution);
     var bestTile = board.getBestTile();
     console.log(bestTile.center + ' ' + bestTile.findScore());
