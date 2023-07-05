@@ -15,8 +15,6 @@ const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
 
-const ShowDebug = false;
-
 class Coordinate {
     constructor(x, y) {
         this.x = x;
@@ -300,6 +298,7 @@ class Tile {
 
     printBestTiles() {
         for (var index = 0; index < this.bestTiles.length; index++) {
+            console.error(this.bestTiles[index].toString());
             if (!this.isLowestResolution()) {
                 this.bestTiles[index].printBestTiles();
             }
@@ -329,12 +328,14 @@ class Tile {
     }
 
     toString() {
-        return "Tile({" + this.center + "} {" + this.resolution + "})";
+        return "Tile({" + this.center + "} {" + this.resolution + "} {" + this.findScore() + "})";
     }
 
     outputMainTile() {
         this.expand(MaxResolution);
         var bestTile = this.getBestTile();
+
+        // this.printBestTiles();
         console.log(bestTile.center + ' ' + bestTile.findScore());
     }
 }
