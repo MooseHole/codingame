@@ -83,16 +83,17 @@ class Zombie extends Person {
     static findClosestHuman(zombie) {
         var minDistance = XBoundary + YBoundary;
         var closestHuman = null;
+        var myLocation = zombie.location;
         zombie.myHumans.forEach(function (human) {
             if (human.dead) {
                 return;
             }
-            var distance = zombie.location.distanceTo(human.location);
+            var distance = myLocation.distanceTo(human.location);
             if (distance < minDistance) {
                 minDistance = distance;
                 closestHuman = human;
             }
-        }.bind(zombie));
+        });
 
         return closestHuman;
     }
@@ -112,19 +113,16 @@ class Zombie extends Person {
             return;
         }
 
-        var myKills = [];
+        var myLocation = this.location;
         this.myHumans.forEach(function (human) {
             if (human.dead || human.id == -1) {
                 return;
             }
-            var distance = this.location.distanceTo(human.location);
+            var distance = myLocation.distanceTo(human.location);
             if (distance == 0) {
-                myKills.push(human.id);
                 human.dead = true;
             }
-        }.bind(this));
-
-        return myKills[0];
+        });
     }
 }
 
@@ -142,25 +140,6 @@ class Player extends Person {
         this.speed = PlayerSpeed;
         this.myZombies = zombies;
         this.myHumans = humans;
-    }
-
-    static findCentroid(zombies) {
-        var x = 0;
-        var y = 0;
-        var denominator = 0;
-
-        zombies.forEach(function (zombie) {
-            if (zombie.dead) {
-                return;
-            }
-            x += zombie.location.x;
-            y += zombie.location.y;
-            denominator++;
-        });
-        if (denominator == 0) {
-            return new Coordinate(0, 0);
-        }
-        return new Coordinate(x / denominator, y / denominator);
     }
 
     clone() {
@@ -375,7 +354,7 @@ fibonnacciCache.set(0, 0);
 fibonnacciCache.set(1, 1);
 fibonnacciCache.set(2, 2);
 for (var i = 3; i < 30; i++) {
-    fibonnacci(i));
+    fibonnacci(i);
 }
 
 // game loop
