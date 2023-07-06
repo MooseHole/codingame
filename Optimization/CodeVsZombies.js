@@ -170,13 +170,7 @@ class Player extends Person {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
-        var score = 0;
-        var baseScore = Math.pow(survivorCount, 2) * 10;
-        for (var i = 1; i <= killCount; i++) {
-            score += baseScore * fibonnacci(i);
-        }
-
-        return score;
+        return Math.pow(survivorCount, 2) * 10 * killScore(killCount);
     }
 
     static canSaveAnyHuman(player) {
@@ -188,6 +182,7 @@ class Player extends Person {
 
                 var playerSteps = Math.floor(Math.max(0, human.location.distanceTo(player.location) - PlayerKillRange) / PlayerSpeed);
                 var zombieSteps = 99999999;
+                var closestZombie = -1;
                 for (let zombie of player.myZombies.values()) {
                     if (zombie instanceof Zombie) {
                         if (zombie.dead) {
@@ -197,11 +192,12 @@ class Player extends Person {
                         var thisZombieSteps = Math.floor(Math.max(0, human.location.distanceTo(zombie.location)) / ZombieSpeed);
                         if (thisZombieSteps < zombieSteps) {
                             zombieSteps = thisZombieSteps;
+                            closestZombie = zombie.id;
                         }
                     }
                 }
 
-                if (playerSteps <= zombieSteps) {
+                if (playerSteps < zombieSteps) {
                     return true;
                 }
             }
@@ -232,11 +228,13 @@ class Player extends Person {
                 }
             });
 
-            if (!Player.canSaveAnyHuman(simulatedPlayer)) {
-                break;
+            if (simulatedPlayer.location.x == targetLocation.x && simulatedPlayer.location.y == targetLocation.y) {
+                if (!Player.canSaveAnyHuman(simulatedPlayer)) {
+                    break;
+                }
+
+                maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
             }
-    
-            maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
         }
 
         return maxScore;
@@ -390,6 +388,7 @@ class Tile {
 
 
 var fibonnacciCache = new Map();
+var killScoreCache = new Map();
 
 function fibonnacci(n) {
     if (!fibonnacciCache.has(n)) {
@@ -402,8 +401,21 @@ function fibonnacci(n) {
 fibonnacciCache.set(0, 0);
 fibonnacciCache.set(1, 1);
 fibonnacciCache.set(2, 2);
-for (var i = 3; i < 30; i++) {
+for (var i = 3; i < 10; i++) {
     fibonnacci(i);
+}
+
+killScoreCache.set(0, 0);
+function killScore(n) {
+    if (!killScoreCache.has(n)) {
+        killScoreCache.set(n, killScore(n - 1) + fibonnacci(n));
+    }
+
+    return killScoreCache.get(n);
+}
+
+for (var i = 0; i < 10; i++) {
+    killScore(i);
 }
 
 // game loop
