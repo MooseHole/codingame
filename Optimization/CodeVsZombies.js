@@ -9,8 +9,8 @@ const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 const LowNumber = -99999999;
 
-const TurnsToSimulate = 20; // (max(XBoundary, YBoundary) / ZombieSpeed) + 1 = 41
-const MaxSavedScores = 2; // ideal 3
+const TurnsToSimulate = 41; // (max(XBoundary, YBoundary) / ZombieSpeed) + 1 = 41
+const MaxSavedScores = 3; // ideal 3
 const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
@@ -186,7 +186,7 @@ class Player extends Person {
                     continue;
                 }
 
-                var playerSteps = Math.max(0, human.location.distanceTo(player.location) - PlayerKillRange) / PlayerSpeed;
+                var playerSteps = Math.floor(Math.max(0, human.location.distanceTo(player.location) - PlayerKillRange) / PlayerSpeed);
                 var zombieSteps = 99999999;
                 for (let zombie of player.myZombies.values()) {
                     if (zombie instanceof Zombie) {
@@ -194,7 +194,7 @@ class Player extends Person {
                             continue;
                         }
 
-                        var thisZombieSteps = Math.max(0, human.location.distanceTo(zombie.location)) / ZombieSpeed;
+                        var thisZombieSteps = Math.floor(Math.max(0, human.location.distanceTo(zombie.location)) / ZombieSpeed);
                         if (thisZombieSteps < zombieSteps) {
                             zombieSteps = thisZombieSteps;
                         }
