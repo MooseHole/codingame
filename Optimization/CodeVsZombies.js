@@ -9,8 +9,8 @@ const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 const LowNumber = -99999999;
 
-const TurnsToSimulate = 41; // max(XBoundary, YBoundary) / ZombieSpeed + 1
-const MaxSavedScores = 3;
+const TurnsToSimulate = 20; // (max(XBoundary, YBoundary) / ZombieSpeed) + 1 = 41
+const MaxSavedScores = 2; // ideal 3
 const MaxResolution = 1000;
 const MinResolution = 1;
 const ResolutionFactor = 10;
@@ -73,6 +73,7 @@ var humans = new Map();
 
 class Zombie extends Person {
     myHumans = new Map();
+
     constructor(id, x, y) {
         super(id, x, y);
         this.speed = ZombieSpeed;
@@ -178,6 +179,37 @@ class Player extends Person {
         return score;
     }
 
+    static canSaveAnyHuman(player) {
+        for (let human of player.myHumans.values()) {
+            if (human instanceof Person) {
+                if (human.dead || human.id == -1) {
+                    continue;
+                }
+
+                var playerSteps = Math.max(0, human.location.distanceTo(player.location) - PlayerKillRange) / PlayerSpeed;
+                var zombieSteps = 99999999;
+                for (let zombie of player.myZombies.values()) {
+                    if (zombie instanceof Zombie) {
+                        if (zombie.dead) {
+                            continue;
+                        }
+
+                        var thisZombieSteps = Math.max(0, human.location.distanceTo(zombie.location)) / ZombieSpeed;
+                        if (thisZombieSteps < zombieSteps) {
+                            zombieSteps = thisZombieSteps;
+                        }
+                    }
+                }
+
+                if (playerSteps <= zombieSteps) {
+                    return true;
+                }
+            }
+        }
+ 
+        return false;
+    }
+
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
         var maxScore = LowNumber;
@@ -200,14 +232,10 @@ class Player extends Person {
                 }
             });
 
-            if (survivorCount == 0) {
+            if (!Player.canSaveAnyHuman(simulatedPlayer)) {
                 return LowNumber;
             }
     
-            if (targetLocation.x == 7000 && targetLocation.y == 3245) {
-                console.error("Simulated player: " + simulatedPlayer.toString() + " score: " + Player.findScoreThisTurn(survivorCount, killCount) + " killCount: " + killCount + " survivorCount: " + survivorCount + " turn: " + i);
-            }
-
             maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
         }
 
