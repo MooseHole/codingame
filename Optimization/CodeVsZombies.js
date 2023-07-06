@@ -9,7 +9,7 @@ const ZombieKillRange = 0;
 const DefaultSpeed = 0;
 const LowNumber = -99999999;
 
-const TurnsToSimulate = 30; // max(XBoundary, YBoundary) / ZombieSpeed + 1
+const TurnsToSimulate = 41; // max(XBoundary, YBoundary) / ZombieSpeed + 1
 const MaxSavedScores = 3;
 const MaxResolution = 1000;
 const MinResolution = 1;
@@ -169,7 +169,13 @@ class Player extends Person {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
-        return Math.pow(survivorCount, 2) * 10 * fibonnacci(killCount);
+        var score = 0;
+        var baseScore = Math.pow(survivorCount, 2) * 10;
+        for (var i = 1; i <= killCount; i++) {
+            score += baseScore * fibonnacci(i);
+        }
+
+        return score;
     }
 
     static simulate(player, targetLocation) {
@@ -198,6 +204,10 @@ class Player extends Person {
                 return LowNumber;
             }
     
+            if (targetLocation.x == 7000 && targetLocation.y == 3245) {
+                console.error("Simulated player: " + simulatedPlayer.toString() + " score: " + Player.findScoreThisTurn(survivorCount, killCount) + " killCount: " + killCount + " survivorCount: " + survivorCount + " turn: " + i);
+            }
+
             maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
         }
 
@@ -252,7 +262,7 @@ class Tile {
         this.resolution = resolution;
     }
 
-    expand(newResolution) {
+    expandAt(newResolution) {
         if (!this.expanded && !this.isLowestResolution()) {
             for (var newX = this.topLeft.x; newX < this.bottomRight.x; newX += newResolution) {
                 for (var newY = this.topLeft.y; newY < this.bottomRight.y; newY += newResolution) {
@@ -265,24 +275,32 @@ class Tile {
         this.expanded = true;
     }
 
+    expand() {
+        this.expandAt(this.resolution / ResolutionFactor);
+    }
+
     isLowestResolution() {
         return this.resolution == MinResolution;
     }
 
     addScore(newTile) {
-        var score = newTile.findScore();
-        for (var index = 0; index < MaxSavedScores; index++) {
-            if (this.bestTiles.length < index + 1) {
-                this.bestTiles.push(newTile);
-                return true;
-            }
-
-            if (score > this.bestTiles[index].findScore()) {
-                this.bestTiles.splice(index, 0, newTile);
-                this.bestTiles.splice(MaxSavedScores, 1);
-                return true;
-            }
+        if (this.bestTiles.length == 0) {
+            this.bestTiles.push(newTile);
+            return;
         }
+
+        var score = newTile.findScore();
+        if (this.bestTiles[0].findScore() < score) {
+            // Insert at the beginning of the list and remove the rest
+            this.bestTiles = [newTile];
+            return;
+        } else if (this.bestTiles[0].findScore() == score && this.bestTiles.length < MaxSavedScores) {
+            // Add to the list
+            this.bestTiles.push(newTile);
+            return;
+        } 
+
+        return;
     }
 
     findScore() {
@@ -311,18 +329,20 @@ class Tile {
         }
 
         if (!this.expanded) {
-            this.expand(this.resolution / ResolutionFactor);
+            this.expand();
         }
         
-        var bestScore = LowNumber;
+        var bestTile = this.bestTiles[0].getBestTile();
+/*
         var bestTile = null;
+        var bestScore = LowNumber;
         for (var index = 0; index < this.bestTiles.length; index++) {
-            var thisScore = this.bestTiles[index].findScore();
+            var thisScore = this.bestTiles[index].getBestTile().findScore();
             if (thisScore > bestScore) {
                 bestScore = thisScore;
-                bestTile = this.bestTiles[index];
+                bestTile = this.bestTiles[index].getBestTile();
             }
-        }
+        }*/
 
         return bestTile.getBestTile();
     }
@@ -332,7 +352,7 @@ class Tile {
     }
 
     outputMainTile() {
-        this.expand(MaxResolution);
+        this.expandAt(MaxResolution);
         var bestTile = this.getBestTile();
 
         // this.printBestTiles();
