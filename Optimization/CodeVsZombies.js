@@ -233,7 +233,7 @@ class Player extends Person {
             });
 
             if (!Player.canSaveAnyHuman(simulatedPlayer)) {
-                return LowNumber;
+                break;
             }
     
             maxScore = Math.max(Player.findScoreThisTurn(survivorCount, killCount), maxScore);
