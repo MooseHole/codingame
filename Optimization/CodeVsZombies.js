@@ -95,10 +95,12 @@ class Zombie extends Person {
             if (distance < minDistance) {
                 minDistance = distance;
                 closestHuman = human;
-                this.kiting = closestHuman.id == PlayerId;
             }
-        }.bind(this));
+        });
 
+        if (closestHuman instanceof Person) {
+            zombie.kiting = closestHuman.id == PlayerId;
+        }
 
         return closestHuman;
     }
@@ -172,11 +174,27 @@ class Player extends Person {
         return clonePlayer;
     }
 
-    static findScoreThisTurn(survivorCount, counts) {
+    static findScoreThisTurn(survivorCount, counts, useRealScore) {
         // Scoring works as follows:
         //   A zombie is worth the number of humans still alive squared x10, not including Ash.
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
-        return Math.pow(survivorCount, 2) * 10 * killScore(counts.killCount) + Math.pow(survivorCount, 2) * 100 * killScore(counts.kiteCount) 
+
+        var thisScore = 0;
+        var realScore = Math.pow(survivorCount, 2) * 10 * killScore(counts.killCount);
+
+        if (!useRealScore) {
+            thisScore = realScore;
+        } else {
+            thisScore = realScore + counts.kiteCount;
+        }
+
+        return {
+            'maxScore': thisScore,
+            'survivorCount': survivorCount,
+            'killCount': counts.killCount,
+            'kiteCount': counts.kiteCount,
+            'aliveCount': counts.aliveCount
+          };
     }
 
     static canSaveAnyHuman(player) {
@@ -215,9 +233,14 @@ class Player extends Person {
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
         var maxScore = LowNumber;
+        var score = Player.findScoreThisTurn(0, {
+            'killCount': 0,
+            'kiteCount': 0,
+            'aliveCount': 0
+          }, true);
+        score.maxScore = LowNumber - 1;
 
-        var survivorCount = 0;
-        for (var i = 0; i < TurnsToSimulate; i++) {
+        for (var simulatedSteps = 0; simulatedSteps < TurnsToSimulate; simulatedSteps++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
                 zombie.step();
             });
@@ -227,15 +250,17 @@ class Player extends Person {
                 zombie.eat();
             });
 
-            survivorCount = 0;
+            var survivorCount = 0;
             simulatedPlayer.myHumans.forEach(function (human) {
                 if (!human.dead && human.id != simulatedPlayer.id) {
                     survivorCount++;
                 }
             });
 
-            if (i == 0 && survivorCount > 0 && counts.aliveCount == 0) {
-                return HighNumber;
+            if (simulatedSteps == 0 && survivorCount > 0 && counts.aliveCount == 0) {
+                score = Player.findScoreThisTurn(survivorCount, counts, simulatedSteps == 0);
+                score.maxScore = HighNumber;
+                break;
             }
 
             if (simulatedPlayer.location.x == targetLocation.x && simulatedPlayer.location.y == targetLocation.y) {
@@ -243,11 +268,12 @@ class Player extends Person {
                     break;
                 }
 
-                maxScore = Math.max(Player.findScoreThisTurn(survivorCount, counts), maxScore);
+                score = Player.findScoreThisTurn(survivorCount, counts, simulatedSteps == 0);
+                maxScore = Math.max(score.maxScore, maxScore);
             }
         }
 
-        return maxScore;
+        return score;
     }
 
     goToLocation(location) {
@@ -264,20 +290,22 @@ class Player extends Person {
         var aliveCount = 0;
         var myLocation = this.location;
         this.myZombies.forEach(function (zombie) {
-            if (zombie.dead) {
-                return;
-            }
-            var distance = myLocation.distanceTo(zombie.location);
-            if (distance <= PlayerKillRange) {
-                zombie.dead = true;
-                killCount++;
-            }
-            else if (zombie.kiting) {
-                kiteCount++;
-            }
+            if (zombie instanceof Zombie) {
+                if (zombie.dead) {
+                    return;
+                }
+                var distance = myLocation.distanceTo(zombie.location);
+                if (distance <= PlayerKillRange) {
+                    zombie.dead = true;
+                    killCount++;
+                }
+                else if (zombie.kiting) {
+                    kiteCount++;
+                }
 
-            if (!zombie.dead) {
-                aliveCount++;
+                if (!zombie.dead) {
+                    aliveCount++;
+                }
             }
         });
 
@@ -338,12 +366,12 @@ class Tile {
             return;
         }
 
-        var score = newTile.findScore();
-        if (this.bestTiles[0].findScore() < score) {
+        var score = newTile.findScore().maxScore;
+        if (this.bestTiles[0].findScore().maxScore < score) {
             // Insert at the beginning of the list and remove the rest
             this.bestTiles = [newTile];
             return;
-        } else if (this.bestTiles[0].findScore() == score && this.bestTiles.length < MaxSavedScores) {
+        } else if (this.bestTiles[0].findScore().maxScore == score && this.bestTiles.length < MaxSavedScores) {
             // Add to the list
             this.bestTiles.push(newTile);
             return;
@@ -405,23 +433,28 @@ class Tile {
         var bestTile = this.getBestTile();
 
         // this.printBestTiles();
-        var score = bestTile.findScore();
+        var foundScore = bestTile.findScore();
+        var score = foundScore.maxScore;
         var quote = "";
         if (score == HighNumber) {
             quote = " Hail 2 The King Baby";
-        } else if (score > 5000) {
+        } else if (score > 3500) {
             quote = " This Is My Boomstick";
-        } else if (score > 4000) {
-            quote = " Groovy              ";
-        } else if (score > 3000) {
-            quote = " Come Get Some       ";
         } else if (score > 2000) {
+            quote = " Groovy              ";
+        } else if (score > 500) {
+            quote = " Come Get Some       ";
+        } else if (score > 250) {
             quote = " Gimme Sum Sugar Baby";
-        } else if (score > 1000) {
+        } else if (score > 100) {
             quote = " Shop Smrt Shop S-Mrt";
+        } else if (score >= 0) {
+            quote = " Everybody Dies Here ";
+        } else if (score < 0) {
+            quote = " Klaatu Barada N...  ";
         }
 
-        console.log(bestTile.center + quote + ' ' + score);
+        console.log(bestTile.center + quote + ' ' + foundScore.maxScore + ' sur:' + foundScore.survivorCount + ' kill:' + foundScore.killCount + ' kite:' + foundScore.kiteCount + ' alive:' + foundScore.aliveCount);
     }
 }
 
