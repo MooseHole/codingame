@@ -182,7 +182,7 @@ class Player extends Person {
         var thisScore = 0;
         var realScore = Math.pow(survivorCount, 2) * 10 * killScore(counts.killCount);
 
-        if (!useRealScore) {
+        if (useRealScore) {
             thisScore = realScore;
         } else {
             thisScore = realScore + counts.kiteCount;
