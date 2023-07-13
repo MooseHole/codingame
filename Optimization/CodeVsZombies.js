@@ -11,10 +11,10 @@ const HighNumber = 99999999;
 const LowNumber = -99999999;
 const PlayerId = -1;
 
-const TurnsToSimulate = 41; // (max(XBoundary, YBoundary) / ZombieSpeed) + 1 = 41
+const TurnsToSimulate = 21; // (max(XBoundary, YBoundary) / ZombieSpeed) + 1 = 41
 const MaxSavedScores = 3; // ideal 3
 const MaxResolution = 1000;
-const MinResolution = 1;
+const MinResolution = 10;
 const ResolutionFactor = 10;
 
 class Coordinate {
@@ -180,20 +180,29 @@ class Player extends Person {
         //  If several zombies are destroyed during on the same round, the nth zombie killed's worth is multiplied by the (n+2)th number of the Fibonnacci sequence (1, 2, 3, 5, 8, and so on). As a consequence, you should kill the maximum amount of zombies during a same turn.
 
         var thisScore = 0;
-        var realScore = Math.pow(survivorCount, 2) * 10 * killScore(counts.killCount);
-
-        if (useRealScore) {
-            thisScore = realScore;
+        if (survivorCount == 0) {
+            thisScore = LowNumber;
         } else {
-            thisScore = realScore + counts.kiteCount;
-        }
+            var realScore = Math.pow(survivorCount, 2) * 10 * killScore(counts.killCount);
 
+            if (useRealScore) {
+                thisScore = realScore;
+            } else {
+                thisScore = realScore; // + counts.kiteCount;
+            }
+
+            if (/*useRealScore &&*/ counts.kiteCount > 1 && counts.kiteDistance < PlayerSpeed) {
+                thisScore += counts.kiteCount * 1000;
+            }
+        }
+        
         return {
             'maxScore': thisScore,
             'survivorCount': survivorCount,
             'killCount': counts.killCount,
             'kiteCount': counts.kiteCount,
-            'aliveCount': counts.aliveCount
+            'aliveCount': counts.aliveCount,
+            'kiteDistance': counts.kiteDistance
           };
     }
 
@@ -232,13 +241,14 @@ class Player extends Person {
 
     static simulate(player, targetLocation) {
         var simulatedPlayer = player.clone();
-        var maxScore = LowNumber;
         var score = Player.findScoreThisTurn(0, {
             'killCount': 0,
             'kiteCount': 0,
-            'aliveCount': 0
+            'aliveCount': 0,
+            'kiteDistance': 0
           }, true);
-        score.maxScore = LowNumber - 1;
+          score.maxScore = LowNumber - 1;
+          var maxScore = score;
 
         for (var simulatedSteps = 0; simulatedSteps < TurnsToSimulate; simulatedSteps++) {
             simulatedPlayer.myZombies.forEach(function (zombie) {
@@ -269,11 +279,21 @@ class Player extends Person {
                 }
 
                 score = Player.findScoreThisTurn(survivorCount, counts, simulatedSteps == 0);
-                maxScore = Math.max(score.maxScore, maxScore);
+                if (maxScore.maxScore < score.maxScore) {
+                    maxScore = score;
+                }
             }
         }
 
-        return score;
+        var survivorCount = 0;
+        simulatedPlayer.myHumans.forEach(function (human) {
+            if (!human.dead && human.id != simulatedPlayer.id) {
+                survivorCount++;
+            }
+        });
+        maxScore.maxScore += survivorCount * 10;
+
+        return maxScore;
     }
 
     goToLocation(location) {
@@ -289,6 +309,8 @@ class Player extends Person {
         var kiteCount = 0;
         var aliveCount = 0;
         var myLocation = this.location;
+        var kiteCenter = new Coordinate(0, 0);
+        var kiteLocations = [];
         this.myZombies.forEach(function (zombie) {
             if (zombie instanceof Zombie) {
                 if (zombie.dead) {
@@ -300,6 +322,7 @@ class Player extends Person {
                     killCount++;
                 }
                 else if (zombie.kiting) {
+                    kiteLocations.push(zombie.location);
                     kiteCount++;
                 }
 
@@ -309,10 +332,29 @@ class Player extends Person {
             }
         });
 
+        kiteLocations.forEach(function (location) {
+            kiteCenter.x += location.x;
+            kiteCenter.y += location.y;
+        });
+
+        kiteCenter.x = Math.floor(kiteCenter.x / kiteCount);
+        kiteCenter.y = Math.floor(kiteCenter.y / kiteCount);
+
+        var kiteDistance = 0;
+
+        kiteLocations.forEach(function (location) {
+            kiteDistance += location.distanceTo(kiteCenter);
+        });
+
+        if (kiteCount > 0) {
+            kiteDistance /= kiteCount;
+        }
+
         return {
             'killCount': killCount,
             'kiteCount': kiteCount,
-            'aliveCount': aliveCount
+            'aliveCount': aliveCount,
+            'kiteDistance': kiteDistance
           };
     }
 }
@@ -411,7 +453,7 @@ class Tile {
         
         var bestTile = this.bestTiles[0].getBestTile();
 /*
-        var bestTile = null;
+        var bestTile = null;*/
         var bestScore = LowNumber;
         for (var index = 0; index < this.bestTiles.length; index++) {
             var thisScore = this.bestTiles[index].getBestTile().findScore();
@@ -419,7 +461,7 @@ class Tile {
                 bestScore = thisScore;
                 bestTile = this.bestTiles[index].getBestTile();
             }
-        }*/
+        }
 
         return bestTile.getBestTile();
     }
@@ -454,7 +496,7 @@ class Tile {
             quote = " Klaatu Barada N...  ";
         }
 
-        console.log(bestTile.center + quote + ' ' + foundScore.maxScore + ' sur:' + foundScore.survivorCount + ' kill:' + foundScore.killCount + ' kite:' + foundScore.kiteCount + ' alive:' + foundScore.aliveCount);
+        console.log(bestTile.center + quote + ' ' + foundScore.maxScore + ' sur:' + foundScore.survivorCount + ' kill:' + foundScore.killCount + ' kite:' + foundScore.kiteCount + ' alive:' + foundScore.aliveCount + ' kiteSpread:' + foundScore.kiteDistance);
     }
 }
 
@@ -483,7 +525,7 @@ fibonnacciCache.set(9, 55);
 fibonnacciCache.set(10, 89);
 fibonnacciCache.set(11, 144);
 fibonnacciCache.set(12, 233);
-fibonnacciCache.set(13, 377);
+fibonnacciCache.set(13, 277);
 fibonnacciCache.set(14, 610);
 fibonnacciCache.set(15, 987);
 fibonnacciCache.set(16, 1597);
@@ -521,33 +563,6 @@ fibonnacciCache.set(47, 4807526976);
 fibonnacciCache.set(48, 7778742049);
 fibonnacciCache.set(49, 12586269025);
 fibonnacciCache.set(50, 20365011074);
-fibonnacciCache.set(51, 32951280099);
-fibonnacciCache.set(52, 53316291173);
-fibonnacciCache.set(53, 86267571272);
-fibonnacciCache.set(54, 139583862445);
-fibonnacciCache.set(55, 225851433717);
-fibonnacciCache.set(56, 365435296162);
-fibonnacciCache.set(57, 591286729879);
-fibonnacciCache.set(58, 956722026041);
-fibonnacciCache.set(59, 1548008755920);
-fibonnacciCache.set(60, 2504730781961);
-fibonnacciCache.set(61, 4052739537881);
-fibonnacciCache.set(62, 6557470319842);
-fibonnacciCache.set(63, 10610209857723);
-fibonnacciCache.set(64, 17167680177565);
-fibonnacciCache.set(65, 27777890035288);
-fibonnacciCache.set(66, 44945570212853);
-fibonnacciCache.set(67, 72723460248141);
-fibonnacciCache.set(68, 117669030460994);
-fibonnacciCache.set(69, 190392490709135);
-fibonnacciCache.set(70, 308061521170129);
-fibonnacciCache.set(71, 498454011879264);
-fibonnacciCache.set(72, 806515533049393);
-fibonnacciCache.set(73, 1304969544928657);
-fibonnacciCache.set(74, 2111485077978050);
-fibonnacciCache.set(75, 3416454622906707);
-fibonnacciCache.set(76, 5527939700884757);
-fibonnacciCache.set(77, 8944394323791464);
 
 killScoreCache.set(0, 0);
 function killScore(n) {
@@ -558,7 +573,7 @@ function killScore(n) {
     return killScoreCache.get(n);
 }
 
-for (var i = 0; i < 10; i++) {
+for (var i = 0; i < 40; i++) {
     killScore(i);
 }
 
